@@ -6,17 +6,33 @@ import { useEffect, useState } from "react";
 import VideoThumbnail from "~/components/videoThumbnail";
 import ThumbnailGrid from "~/components/ThumbnailGrid";
 
+// Cache for trending videos with 5 minute TTL
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
+let trendingCache: { data: any; timestamp: number } | null = null;
+
 export async function loader({ request }: LoaderArgs) {
   // const { supabase, response } = useSupabase(request);
   // const url = new URL(request.url);
   // const page = parseInt(url.searchParams.get("page") ?? '0')
 
   try {
+    // Check if we have valid cached data
+    const now = Date.now();
+    if (trendingCache && (now - trendingCache.timestamp) < CACHE_TTL) {
+      console.log('Returning cached trending videos');
+      return json({ trendingVideos: trendingCache.data });
+    }
 
     const trendingResponse = await randomFetch('api/v1/trending?type=music');
     const trendingVideos = await trendingResponse.json();
-    // TODO: Cache url
-    // return trendingVideos;
+
+    // Cache the response
+    trendingCache = {
+      data: trendingVideos,
+      timestamp: now
+    };
+
+    console.log('Cached new trending videos');
     return json({ trendingVideos },
       // { headers: response.headers }
     );
