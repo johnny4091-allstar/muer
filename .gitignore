@@ -10,3 +10,6 @@ node_modules
 
 cypress/videos/
 .env
+
+# TypeScript build cache
+*.tsbuildinfo
