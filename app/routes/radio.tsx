@@ -2,6 +2,7 @@ import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/20/solid";
 import { LoaderArgs, json } from "@remix-run/node";
 import { useLoaderData, useOutletContext } from "@remix-run/react";
 import { useAtom } from "jotai";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { zx } from "zodix";
 import { Video, playlistsAtom } from "~/atoms";
@@ -12,11 +13,25 @@ import CImage from "~/components/cimage";
 import VideoListThumbnail from "~/components/videoListThumbnail";
 import VideoThumbnail from "~/components/videoThumbnail";
 import { randomFetch } from "~/utils";
-import Lottie from "lottie-react";
-import spectrumAnimation from "../../public/spectrum.json";
 
+// Dynamic import for Lottie to avoid SSR issues
+const useLottie = () => {
+    const [Lottie, setLottie] = useState<any>(null);
+    const [spectrumAnimation, setSpectrumAnimation] = useState<any>(null);
+
+    useEffect(() => {
+        // Only import on client side
+        if (typeof window !== 'undefined') {
+            import('lottie-react').then((module) => setLottie(() => module.default));
+            import('../../public/spectrum.json').then((module) => setSpectrumAnimation(module.default));
+        }
+    }, []);
+
+    return { Lottie, spectrumAnimation };
+};
 
 export default function RadioPage() {
+    const { Lottie, spectrumAnimation } = useLottie();
     const { onThumbnailClick, playingVideoData } = useOutletContext<any>()
     const thumbnailUrl = playingVideoData?.videoThumbnails?.find((x: any) => x.quality == 'maxresdefault')?.url
     || playingVideoData?.videoThumbnails?.at(0)?.url;
@@ -47,12 +62,14 @@ export default function RadioPage() {
                         className="group/row cursor-pointer transition-all duration-150 ">
                                         <td className="w-16 pl-6 group-hover/row:bg-white/8 rounded-l-lg text-green-500">
                                             <div className="group-hover/row:hidden w-8 h-8 overflow-hidden relative">
-                                                <Lottie
-                                                // lottieRef={lottieRef}
-                                                autoplay={true}
-                                                loop={true}
-                                                animationData={spectrumAnimation}
-                                                className='w-16 h-16 absolute -top-4 -left-4' />
+                                                {Lottie && spectrumAnimation && (
+                                                    <Lottie
+                                                    // lottieRef={lottieRef}
+                                                    autoplay={true}
+                                                    loop={true}
+                                                    animationData={spectrumAnimation}
+                                                    className='w-16 h-16 absolute -top-4 -left-4' />
+                                                )}
                                             </div>
                                             <div className="hidden group-hover/row:flex text-white w-8 h-8  items-center justify-end">{
                                                 <PlayIcon className="w-4 h-4"/>
