@@ -220,6 +220,13 @@ cp "$INSTALL_DIR/deploy/muer-assistant.service" "$MAIN_SERVICE"
 
 if [[ $HEADLESS == true ]]; then
     sed -i 's|assistant.main$|assistant.main --text|' "$MAIN_SERVICE"
+    # Remove PulseAudio groups — they don't exist on headless servers
+    sed -i 's|SupplementaryGroups=.*|SupplementaryGroups=audio|' "$MAIN_SERVICE"
+    # Remove Group=audio if the audio group doesn't exist either
+    if ! getent group audio &>/dev/null; then
+        sed -i '/^Group=audio/d' "$MAIN_SERVICE"
+        sed -i 's|SupplementaryGroups=audio||' "$MAIN_SERVICE"
+    fi
     info "Configured for headless/text mode."
 fi
 
