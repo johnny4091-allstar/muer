@@ -111,10 +111,10 @@ PKGS=(
     git curl wget
     xclip libnotify-bin          # clipboard + desktop notifications
     bluetooth bluez              # Bluetooth control
+    portaudio19-dev              # pyaudio build dep (needed even in headless)
 )
 
 if [[ $HEADLESS == false ]]; then
-    PKGS+=(portaudio19-dev)
     if dpkg --compare-versions "$UBUNTU_VER" ge "22.04"; then
         PKGS+=(pulseaudio-utils)
     else
@@ -164,7 +164,12 @@ python3 -m venv "$INSTALL_DIR/venv"
 "$INSTALL_DIR/venv/bin/pip" install --upgrade pip --quiet
 
 info "Installing Python packages (this may take a minute)..."
-"$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/assistant/requirements.txt" --quiet
+if [[ $HEADLESS == true ]]; then
+    REQS_FILE="$INSTALL_DIR/assistant/requirements-headless.txt"
+else
+    REQS_FILE="$INSTALL_DIR/assistant/requirements.txt"
+fi
+"$INSTALL_DIR/venv/bin/pip" install -r "$REQS_FILE" --quiet
 success "Python packages installed."
 
 # ── .env file ─────────────────────────────────────────────────────────────────

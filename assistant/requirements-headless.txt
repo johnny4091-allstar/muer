@@ -1,0 +1,20 @@
+# Muer Voice Assistant — headless/text-mode dependencies
+# Audio I/O and wake-word packages are excluded (no microphone needed).
+
+# Speech-to-text (local Whisper — used for file-based transcription)
+faster-whisper>=0.10.0
+
+# Text-to-speech
+pyttsx3>=2.90
+
+# Claude API (intent processing + Q&A)
+anthropic>=0.28.0
+
+# Numpy (required by faster-whisper)
+numpy>=1.24.0,<2.0.0
+
+# HTTP requests (weather, news, sports, Wikipedia, smart home)
+requests>=2.31.0
+
+# Environment variable loading
+python-dotenv>=1.0.0
