@@ -1,13 +1,15 @@
 # =============================================================================
 # Muer Voice Assistant — Docker Image
-# Build: docker build -f deploy/Dockerfile.assistant -t muer-assistant .
-# Run:   docker run --device /dev/snd -e ANTHROPIC_API_KEY=... muer-assistant
+#
+# Build:  docker build -f deploy/Dockerfile.assistant -t muer-assistant .
+# Run:    bash deploy/docker-run.sh start
 # =============================================================================
 
 FROM ubuntu:22.04
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,6 +25,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     pulseaudio-utils \
+    # Bluetooth
+    bluetooth \
+    bluez \
+    # Desktop notifications (no-op in container but avoids import errors)
+    libnotify-bin \
+    # Clipboard support
+    xclip \
+    # Misc
+    git \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -32,18 +43,17 @@ RUN curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
 
 WORKDIR /app
 
-# Install Python dependencies first (layer caching)
+# Install Python dependencies (cached layer)
 COPY assistant/requirements.txt /app/assistant/requirements.txt
 RUN pip3 install --no-cache-dir -r /app/assistant/requirements.txt
 
-# Copy application source
+# Copy assistant source
 COPY assistant/ /app/assistant/
 COPY .env.sample /app/.env
 
-# PulseAudio config for Docker audio passthrough
-RUN echo "default-server = unix:/run/user/1000/pulse/native" > /etc/pulse/client.conf
+# PulseAudio passthrough config
+RUN echo "default-server = unix:/run/user/1000/pulse/native\nautospawn = no" \
+    > /etc/pulse/client.conf
 
-ENV PYTHONPATH=/app
-
-# Run in text mode by default; override CMD for production
+# Run without wake word by default (always-on listening)
 CMD ["python3", "-m", "assistant.main", "--no-wake"]
