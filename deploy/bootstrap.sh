@@ -3,11 +3,12 @@
 # Muer Voice Assistant — Bootstrap
 # Run this on any fresh Ubuntu server to install everything.
 #
-# One-liner:
-#   curl -fsSL https://raw.githubusercontent.com/johnny4091-allstar/muer/claude/voice-assistant-ubuntu-Nn1c7/deploy/bootstrap.sh | sudo bash
+# One-liner (headless server):
+#   curl -fsSL https://raw.githubusercontent.com/johnny4091-allstar/muer/claude/voice-assistant-ubuntu-Nn1c7/deploy/bootstrap.sh \
+#     | sudo bash -s -- --headless --key "sk-ant-YOUR_KEY_HERE"
 #
-# Or with options:
-#   curl -fsSL <url> | sudo bash -s -- --headless
+# Note: use --key to pass your Anthropic API key. Setting ANTHROPIC_API_KEY=...
+# before sudo does NOT work — sudo strips environment variables by default.
 # =============================================================================
 
 set -euo pipefail

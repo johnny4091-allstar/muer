@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
         --quiet)    QUIET=true;        shift   ;;
         --key)      ANTHROPIC_API_KEY="$2"; shift 2 ;;
         -h|--help)
-            echo "Usage: sudo bash install.sh [--user USER] [--dir DIR] [--headless] [--quiet]"
+            echo "Usage: sudo bash install.sh [--user USER] [--dir DIR] [--headless] [--quiet] [--key ANTHROPIC_API_KEY]"
             exit 0 ;;
         *) error "Unknown argument: $1"; exit 1 ;;
     esac

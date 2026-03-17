@@ -10,15 +10,23 @@ Ubuntu voice assistant (Alexa/Google Home style) with 30+ built-in skills.
 
 ```bash
 git clone <repo-url> ~/muer && cd ~/muer
-sudo bash deploy/install.sh
+sudo bash deploy/install.sh --key "sk-ant-YOUR_KEY_HERE"
 ```
 
-The installer will prompt for your API keys, install all dependencies, configure systemd, and start the service.
+The installer configures systemd and starts the service automatically.
 
 **Headless / cloud server (no microphone):**
 ```bash
-sudo bash deploy/install.sh --headless
+sudo bash deploy/install.sh --headless --key "sk-ant-YOUR_KEY_HERE"
 ```
+
+**One-liner (no git clone needed):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/johnny4091-allstar/muer/claude/voice-assistant-ubuntu-Nn1c7/deploy/bootstrap.sh \
+  | sudo bash -s -- --headless --key "sk-ant-YOUR_KEY_HERE"
+```
+
+> Use `--key` to pass your Anthropic API key. Do not use `ANTHROPIC_API_KEY=... sudo bash` — `sudo` strips environment variables.
 
 ---
 
