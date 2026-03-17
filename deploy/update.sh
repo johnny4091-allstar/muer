@@ -55,6 +55,10 @@ if [[ "$OLD_SHA" == "$REMOTE_SHA" ]]; then
 fi
 
 info "Updating: $OLD_SHA → $REMOTE_SHA"
+# Discard local modifications and untracked files so the pull never conflicts.
+# The only file worth preserving is .env — everything else is managed by git.
+git checkout -- . 2>/dev/null || true
+git clean -fd --exclude='.env' 2>&1 | sed 's/^/  /'
 git pull origin "$BRANCH" 2>&1 | sed 's/^/  /'
 
 # Copy updated source files
