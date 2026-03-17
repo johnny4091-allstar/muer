@@ -654,14 +654,9 @@ export default function App() {
                   duration
                 }))
               }}
-              // Or formatStreams
-              // Try only one url
-              // Fallback to youtube embed
-              urls={
-                [
-                  playingVideoData?.adaptiveFormats?.at(0)?.url, `https://www.youtube.com/watch?v=${playingVideoData?.videoId}`
-                ]
-              }
+              urls={[
+                `https://www.youtube.com/watch?v=${playingVideoData?.videoId}`,
+              ]}
               volume={playerState.volume}
             />
 
