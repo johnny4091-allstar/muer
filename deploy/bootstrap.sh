@@ -17,11 +17,12 @@ BRANCH="claude/voice-assistant-ubuntu-Nn1c7"
 CLONE_DIR="/opt/muer-src"
 ARGS=("$@")
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'
 BOLD='\033[1m'; RESET='\033[0m'
 
 info()    { echo -e "${CYAN}▶${RESET} $*"; }
 success() { echo -e "${GREEN}✓${RESET} $*"; }
+warn()    { echo -e "${YELLOW}⚠${RESET} $*"; }
 die()     { echo -e "${RED}✗${RESET} $*" >&2; exit 1; }
 
 [[ $EUID -ne 0 ]] && die "Run with sudo:  sudo bash deploy/bootstrap.sh"
@@ -51,20 +52,16 @@ fi
 info "Running installer..."
 
 # When piped through curl, stdin is not a terminal — force --quiet so read
-# prompts don't hang. User can set keys in /opt/muer-assistant/.env afterward.
+# prompts don't hang.
 EXTRA_ARGS=()
 if [[ ! -t 0 ]]; then
     warn "Non-interactive mode detected (piped from curl) — using --quiet."
-    warn "Edit /opt/muer-assistant/.env after install to add API keys."
     EXTRA_ARGS+=(--quiet)
 fi
 
-bash "$CLONE_DIR/deploy/install.sh" "${ARGS[@]}" "${EXTRA_ARGS[@]}"
+# Forward ANTHROPIC_API_KEY env var as --key if not already in ARGS
+if [[ -n "${ANTHROPIC_API_KEY:-}" ]] && ! printf '%s\n' "${ARGS[@]}" | grep -q -- '--key'; then
+    EXTRA_ARGS+=(--key "$ANTHROPIC_API_KEY")
+fi
 
-echo ""
-echo "━━━ Next: add your API keys ━━━"
-echo "  nano /opt/muer-assistant/.env"
-echo ""
-echo "  Then start the assistant:"
-echo "  systemctl start muer-assistant@$(logname 2>/dev/null || echo root)"
-echo ""
+bash "$CLONE_DIR/deploy/install.sh" "${ARGS[@]}" "${EXTRA_ARGS[@]}"

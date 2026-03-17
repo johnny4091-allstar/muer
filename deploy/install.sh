@@ -37,6 +37,7 @@ while [[ $# -gt 0 ]]; do
         --dir)      INSTALL_DIR="$2";  shift 2 ;;
         --headless) HEADLESS=true;     shift   ;;
         --quiet)    QUIET=true;        shift   ;;
+        --key)      ANTHROPIC_API_KEY="$2"; shift 2 ;;
         -h|--help)
             echo "Usage: sudo bash install.sh [--user USER] [--dir DIR] [--headless] [--quiet]"
             exit 0 ;;
@@ -75,11 +76,15 @@ if [[ $QUIET == false ]]; then
     echo "  Press Enter to skip optional values."
     echo ""
 
-    read -rp "  Anthropic API key (required — https://console.anthropic.com): " ANTHROPIC_API_KEY
-    while [[ -z "$ANTHROPIC_API_KEY" ]]; do
-        warn "Anthropic API key is required for smart responses."
-        read -rp "  Anthropic API key: " ANTHROPIC_API_KEY
-    done
+    if [[ -z "$ANTHROPIC_API_KEY" ]]; then
+        read -rp "  Anthropic API key (required — https://console.anthropic.com): " ANTHROPIC_API_KEY
+        while [[ -z "$ANTHROPIC_API_KEY" ]]; do
+            warn "Anthropic API key is required for smart responses."
+            read -rp "  Anthropic API key: " ANTHROPIC_API_KEY
+        done
+    else
+        info "Anthropic API key provided — skipping prompt."
+    fi
 
     read -rp "  OpenWeatherMap API key (optional — https://openweathermap.org/api): " OWM_API_KEY
     read -rp "  Default weather city [New York]: " input_city
@@ -239,11 +244,18 @@ echo "║   Installation complete!                 ║"
 echo "╚══════════════════════════════════════════╝"
 echo -e "${RESET}"
 
-echo -e "${BOLD}Start the assistant:${RESET}"
-echo "  sudo systemctl start muer-assistant@${SERVICE_USER}"
-echo ""
-echo -e "${BOLD}Test right now (text mode):${RESET}"
-echo "  sudo -u $SERVICE_USER $INSTALL_DIR/venv/bin/python -m assistant.main --text"
+# ── Start the service ─────────────────────────────────────────────────────────
+if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+    info "Starting muer-assistant@${SERVICE_USER}..."
+    systemctl restart "muer-assistant@${SERVICE_USER}" && \
+        success "Service started." || \
+        warn "Service start failed — check: journalctl -u muer-assistant@${SERVICE_USER} -n 50"
+else
+    warn "ANTHROPIC_API_KEY not set — service not started."
+    warn "Add it to $ENV_FILE then run:"
+    warn "  systemctl start muer-assistant@${SERVICE_USER}"
+fi
+
 echo ""
 echo -e "${BOLD}View logs:${RESET}"
 echo "  journalctl -u muer-assistant@${SERVICE_USER} -f"
