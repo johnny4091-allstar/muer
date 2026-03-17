@@ -49,4 +49,22 @@ fi
 
 # ── Run installer ─────────────────────────────────────────────────────────────
 info "Running installer..."
-bash "$CLONE_DIR/deploy/install.sh" "${ARGS[@]}"
+
+# When piped through curl, stdin is not a terminal — force --quiet so read
+# prompts don't hang. User can set keys in /opt/muer-assistant/.env afterward.
+EXTRA_ARGS=()
+if [[ ! -t 0 ]]; then
+    warn "Non-interactive mode detected (piped from curl) — using --quiet."
+    warn "Edit /opt/muer-assistant/.env after install to add API keys."
+    EXTRA_ARGS+=(--quiet)
+fi
+
+bash "$CLONE_DIR/deploy/install.sh" "${ARGS[@]}" "${EXTRA_ARGS[@]}"
+
+echo ""
+echo "━━━ Next: add your API keys ━━━"
+echo "  nano /opt/muer-assistant/.env"
+echo ""
+echo "  Then start the assistant:"
+echo "  systemctl start muer-assistant@$(logname 2>/dev/null || echo root)"
+echo ""
