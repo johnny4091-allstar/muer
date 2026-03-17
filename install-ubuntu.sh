@@ -1,7 +1,8 @@
 #!/bin/bash
 
 ###############################################################################
-# IPTV Management Panel - Ubuntu 20.04 Automated Installation Script
+# IPTV Management Panel - Ubuntu Automated Installation Script
+# Supports: Ubuntu 20.04 LTS, Ubuntu 22.04 LTS
 #
 # Run as root or with sudo:
 #   sudo bash install-ubuntu.sh
@@ -26,10 +27,14 @@ echo -e "${BLUE}"
 cat << "EOF"
 ╔═══════════════════════════════════════════════════════════╗
 ║        IPTV Management Panel Installer                   ║
-║        Ubuntu 20.04 LTS                                  ║
+║        Ubuntu 20.04 / 22.04 LTS                          ║
 ╚═══════════════════════════════════════════════════════════╝
 EOF
 echo -e "${NC}"
+
+# Detect Ubuntu version
+UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "unknown")
+log_info "Detected Ubuntu version: $UBUNTU_VERSION"
 
 # ── Must run as root ─────────────────────────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
