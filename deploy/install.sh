@@ -108,13 +108,23 @@ fi
 # Set ownership
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR"
 
-# --- systemd service ---
-echo "[6/6] Installing systemd service..."
-SERVICE_FILE="/etc/systemd/system/muer-assistant@.service"
-cp "$REPO_DIR/deploy/muer-assistant.service" "$SERVICE_FILE"
+# --- systemd services (assistant + auto-updater) ---
+echo "[6/7] Installing systemd service..."
+cp "$REPO_DIR/deploy/muer-assistant.service"  "/etc/systemd/system/muer-assistant@.service"
+cp "$REPO_DIR/deploy/muer-updater.service"    "/etc/systemd/system/muer-updater@.service"
+cp "$REPO_DIR/deploy/muer-updater.timer"      "/etc/systemd/system/muer-updater@.timer"
 
 systemctl daemon-reload
 systemctl enable "muer-assistant@${SERVICE_USER}"
+systemctl enable  "muer-updater@${SERVICE_USER}.timer"
+
+echo "[7/7] Configuring git for auto-updates..."
+# Ensure the install dir is a git repo pointing to origin
+if [[ ! -d "$INSTALL_DIR/.git" ]]; then
+    cp -r "$REPO_DIR/.git" "$INSTALL_DIR/"
+fi
+git -C "$INSTALL_DIR" remote set-url origin "$(git -C "$REPO_DIR" remote get-url origin)" 2>/dev/null || true
+chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR/.git"
 
 echo ""
 echo "========================================"
@@ -123,12 +133,23 @@ echo "========================================"
 echo ""
 echo " Next steps:"
 echo "   1. Edit your config: nano $INSTALL_DIR/.env"
-echo "   2. Start the service:"
+echo "   2. Start the assistant:"
 echo "      sudo systemctl start muer-assistant@$SERVICE_USER"
-echo "   3. Check status:"
+echo "   3. Start the auto-updater timer:"
+echo "      sudo systemctl start muer-updater@${SERVICE_USER}.timer"
+echo "   4. Check status:"
 echo "      sudo systemctl status muer-assistant@$SERVICE_USER"
-echo "   4. View logs:"
+echo "   5. View logs:"
 echo "      journalctl -u muer-assistant@$SERVICE_USER -f"
+echo ""
+echo " Auto-update options (add to $INSTALL_DIR/.env):"
+echo "   AUTO_UPDATE_ENABLED=true        # built-in polling (default: every 5 min)"
+echo "   AUTO_UPDATE_INTERVAL=300        # seconds between checks"
+echo "   WEBHOOK_SECRET=your_secret      # enable GitHub webhook on port 9000"
+echo "   WEBHOOK_PORT=9000"
+echo ""
+echo " GitHub webhook URL: http://YOUR_SERVER_IP:9000/webhook"
+echo " (Set this in your GitHub repo → Settings → Webhooks)"
 echo ""
 echo " Or run manually (for testing):"
 echo "   cd $INSTALL_DIR && venv/bin/python -m assistant.main --text"

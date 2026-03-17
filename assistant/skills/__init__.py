@@ -9,7 +9,6 @@ from assistant.utils.logger import get_logger
 
 log = get_logger("skills")
 
-# Registry populated by register()
 _REGISTRY: dict[str, Callable] = {}
 
 
@@ -37,12 +36,12 @@ def dispatch(intent_data: dict[str, Any], tts) -> bool:
         handler(params=params, tts=tts, response_hint=response_hint)
         return True
     except Exception as e:
-        log.error(f"Skill '{intent}' raised an error: {e}")
-        tts.speak("Sorry, something went wrong.")
+        log.error(f"Skill '{intent}' raised an error: {e}", exc_info=True)
+        tts.speak("Sorry, something went wrong with that.")
         return False
 
 
-# Import skills to trigger registration
+# Import all skill modules to trigger @register() decorators
 from assistant.skills import (  # noqa: E402, F401
     music,
     system_control,
@@ -50,4 +49,20 @@ from assistant.skills import (  # noqa: E402, F401
     weather_skill,
     general_qa,
     datetime_skill,
+    # New skills
+    alarm_skill,
+    reminder_skill,
+    lists_skill,
+    notes_skill,
+    news_skill,
+    wikipedia_skill,
+    math_skill,
+    jokes_skill,
+    routines_skill,
+    ambient_skill,
+    stopwatch_skill,
+    system_skill,
+    smart_home_skill,
+    sports_skill,
+    translation_skill,
 )

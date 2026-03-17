@@ -17,9 +17,9 @@ pyttsx3>=2.90
 anthropic>=0.28.0
 
 # Numpy (required by openwakeword)
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 
-# HTTP requests (weather skill)
+# HTTP requests (weather, news, sports, Wikipedia, smart home)
 requests>=2.31.0
 
 # Environment variable loading

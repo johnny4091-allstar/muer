@@ -25,6 +25,9 @@ CHIME_TEXT = f"{config.ASSISTANT_NAME} is listening."
 
 
 class VoiceAssistant:
+    # Class-level flags so skills can read/set them
+    DND: bool = False
+
     def __init__(self, no_wake: bool = False, text_mode: bool = False) -> None:
         self.no_wake = no_wake
         self.text_mode = text_mode
@@ -32,10 +35,10 @@ class VoiceAssistant:
         self.stt = SpeechToText() if not text_mode else None
         self._active = threading.Event()
         self._stop = threading.Event()
+        self._conversation_history: list[dict] = []  # multi-turn context
 
     def _on_wake(self) -> None:
-        """Called by wake word detector when wake word is detected."""
-        if not self._active.is_set():
+        if not VoiceAssistant.DND and not self._active.is_set():
             self._active.set()
 
     def setup(self) -> None:
@@ -43,6 +46,16 @@ class VoiceAssistant:
         self.tts.load()
         if self.stt:
             self.stt.load()
+
+        # Register TTS reference for timer/alarm/reminder callbacks
+        from assistant.skills._tts_ref import set_tts  # noqa: PLC0415
+        set_tts(self.tts)
+
+        # Start auto-updater if enabled
+        if config.AUTO_UPDATE_ENABLED and not self.text_mode:
+            from assistant.updater import AutoUpdater  # noqa: PLC0415
+            self._updater = AutoUpdater()
+            self._updater.start()
 
     def run(self) -> None:
         self.setup()
@@ -58,7 +71,10 @@ class VoiceAssistant:
             from assistant.wake_word import WakeWordDetector  # noqa: PLC0415
             detector = WakeWordDetector(on_wake=self._on_wake)
             detector.start()
-            self.tts.speak(f"Hi, I'm {config.ASSISTANT_NAME}. Say {config.WAKE_WORD.replace('_', ' ')} to get started.")
+            self.tts.speak(
+                f"Hi, I'm {config.ASSISTANT_NAME}. "
+                f"Say {config.WAKE_WORD.replace('_', ' ')} to get started."
+            )
             self._run_listen_loop(always_on=False)
             detector.stop()
 
@@ -67,7 +83,8 @@ class VoiceAssistant:
         while not self._stop.is_set():
             if always_on or self._active.wait(timeout=0.1):
                 self._active.clear()
-                self._handle_one_command()
+                if not VoiceAssistant.DND:
+                    self._handle_one_command()
 
     def _handle_one_command(self) -> None:
         self.tts.speak(CHIME_TEXT)
@@ -83,8 +100,35 @@ class VoiceAssistant:
             self.tts.speak("I didn't catch that.")
             return
 
+        self._process_command(text)
+
+        # Follow-up mode: keep listening for a few seconds after responding
+        if config.FOLLOW_UP_SECONDS > 0:
+            self._follow_up_loop()
+
+    def _follow_up_loop(self) -> None:
+        """Stay active for FOLLOW_UP_SECONDS to allow follow-up commands."""
+        deadline = time.time() + config.FOLLOW_UP_SECONDS
+        while time.time() < deadline and not self._stop.is_set():
+            try:
+                text = self.stt.listen_and_transcribe()
+                if text.strip():
+                    self._process_command(text)
+                    deadline = time.time() + config.FOLLOW_UP_SECONDS  # extend on activity
+            except Exception:
+                break
+
+    def _process_command(self, text: str) -> None:
         log.info(f"Processing: '{text}'")
-        intent_data = parse_intent(text)
+
+        # Trim history to last 10 turns (5 exchanges)
+        self._conversation_history = self._conversation_history[-10:]
+
+        intent_data = parse_intent(text, self._conversation_history)
+
+        # Update history
+        self._conversation_history.append({"role": "user", "content": text})
+        self._conversation_history.append({"role": "assistant", "content": intent_data.get("response_hint", "")})
 
         from assistant.skills import dispatch  # noqa: PLC0415
         dispatch(intent_data, self.tts)
@@ -102,10 +146,7 @@ class VoiceAssistant:
                 break
             if not text:
                 continue
-            intent_data = parse_intent(text)
-            print(f"  Intent: {intent_data}")
-            from assistant.skills import dispatch  # noqa: PLC0415
-            dispatch(intent_data, self.tts)
+            self._process_command(text)
 
     def stop(self) -> None:
         self._stop.set()

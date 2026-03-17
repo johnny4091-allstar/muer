@@ -1,0 +1,30 @@
+# Standalone updater service — use this if you want the updater
+# to run independently of the assistant (e.g., on a server).
+# The assistant also has the updater built-in when AUTO_UPDATE_ENABLED=true.
+
+[Unit]
+Description=Muer Voice Assistant — Auto Updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=%i
+WorkingDirectory=/opt/muer-assistant
+EnvironmentFile=/opt/muer-assistant/.env
+ExecStart=/opt/muer-assistant/venv/bin/python -c "\
+import subprocess, sys, os, hashlib; \
+repo='/opt/muer-assistant'; \
+subprocess.run(['git','fetch','origin'], cwd=repo); \
+local=subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo).strip(); \
+remote=subprocess.check_output(['git','rev-parse','origin/claude/voice-assistant-ubuntu-Nn1c7'],cwd=repo).strip(); \
+sys.exit(0) if local==remote else None; \
+subprocess.run(['git','pull','origin','claude/voice-assistant-ubuntu-Nn1c7'],cwd=repo); \
+subprocess.run(['/opt/muer-assistant/venv/bin/pip','install','-r',repo+'/assistant/requirements.txt']); \
+subprocess.run(['systemctl','restart','muer-assistant@%i']); \
+"
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Muer Voice Assistant Auto-Update Timer
+Requires=muer-updater@%i.service
+
+[Timer]
+# Run every 5 minutes
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
