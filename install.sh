@@ -134,20 +134,34 @@ create_application_directory() {
 clone_repository() {
     print_info "Cloning repository..."
 
-    # Clone the repository
-    git clone https://github.com/johnny4091-allstar/muer.git temp_clone
+    # Clone the specific branch
+    git clone -b claude/iptv-management-panel-SrHfM https://github.com/johnny4091-allstar/muer.git temp_clone
 
-    # Move IPTV backend files from temp directory
+    # Copy IPTV backend files from subdirectory
     if [ -d "temp_clone/iptv-backend" ]; then
-        mv temp_clone/iptv-backend/* "$APP_DIR/" 2>/dev/null || true
-        mv temp_clone/iptv-backend/.* "$APP_DIR/" 2>/dev/null || true
+        print_info "Copying files from iptv-backend directory..."
+        # Use rsync or cp with proper flags to copy everything including hidden files
+        cp -r temp_clone/iptv-backend/. "$APP_DIR/"
     else
-        mv temp_clone/* "$APP_DIR/" 2>/dev/null || true
-        mv temp_clone/.* "$APP_DIR/" 2>/dev/null || true
+        print_info "Copying files from root directory..."
+        cp -r temp_clone/. "$APP_DIR/"
     fi
+
+    # Clean up temp directory
     rm -rf temp_clone
 
-    print_success "Repository cloned"
+    # Verify critical files exist
+    if [ ! -f "$APP_DIR/package.json" ]; then
+        print_error "package.json not found after clone!"
+        exit 1
+    fi
+
+    if [ ! -f "$APP_DIR/server.js" ]; then
+        print_error "server.js not found after clone!"
+        exit 1
+    fi
+
+    print_success "Repository cloned successfully"
 }
 
 install_npm_dependencies() {
@@ -163,6 +177,17 @@ initialize_database() {
     print_info "Initializing database..."
 
     cd "$APP_DIR"
+
+    # Verify the init script exists
+    if [ ! -f "scripts/init-db.js" ]; then
+        print_error "Database initialization script not found!"
+        print_error "Expected: $APP_DIR/scripts/init-db.js"
+        print_info "Listing directory contents:"
+        ls -la "$APP_DIR/"
+        exit 1
+    fi
+
+    # Run the initialization script
     node scripts/init-db.js
 
     print_success "Database initialized"
