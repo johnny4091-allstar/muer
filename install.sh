@@ -50,8 +50,8 @@ check_root() {
 }
 
 get_server_ip() {
-    # Try multiple methods to get server IP
-    SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s icanhazip.com 2>/dev/null || hostname -I | awk '{print $1}')
+    # Force IPv4 address detection only
+    SERVER_IP=$(curl -4 -s ifconfig.me 2>/dev/null || curl -4 -s icanhazip.com 2>/dev/null || ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -n1)
     if [ -z "$SERVER_IP" ]; then
         SERVER_IP="localhost"
     fi
