@@ -1,9 +1,14 @@
-// API Configuration
-const API_BASE = window.location.origin;
+// API Configuration - Force HTTP protocol
+const API_BASE = window.location.protocol + '//' + window.location.host;
 let authToken = localStorage.getItem('authToken');
+
+// Debug logging
+console.log('API Base URL:', API_BASE);
+console.log('Auth Token:', authToken ? 'Present' : 'Not found');
 
 // Check authentication on load
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, checking authentication...');
     if (authToken) {
         verifyToken();
     } else {
@@ -36,6 +41,9 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     const username = document.getElementById('loginUsername').value;
     const password = document.getElementById('loginPassword').value;
 
+    console.log('Login attempt for user:', username);
+    console.log('API endpoint:', `${API_BASE}/api/auth/login`);
+
     try {
         const response = await fetch(`${API_BASE}/api/auth/login`, {
             method: 'POST',
@@ -43,34 +51,41 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
             body: JSON.stringify({ username, password })
         });
 
+        console.log('Login response status:', response.status);
+
         if (response.ok) {
             const data = await response.json();
+            console.log('Login successful, token received');
             authToken = data.token;
             localStorage.setItem('authToken', authToken);
             showDashboard();
             loadDashboardData();
         } else {
-            const error = await response.json();
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            console.error('Login failed:', error);
             showError('loginError', error.error || 'Login failed');
         }
     } catch (error) {
         console.error('Login error:', error);
-        showError('loginError', 'Connection error');
+        showError('loginError', 'Connection error: ' + error.message);
     }
 });
 
 function logout() {
+    console.log('Logging out...');
     authToken = null;
     localStorage.removeItem('authToken');
     showLogin();
 }
 
 function showLogin() {
+    console.log('Showing login page');
     document.getElementById('loginPage').style.display = 'flex';
     document.getElementById('dashboardPage').classList.remove('active');
 }
 
 function showDashboard() {
+    console.log('Showing dashboard');
     document.getElementById('loginPage').style.display = 'none';
     document.getElementById('dashboardPage').classList.add('active');
 }

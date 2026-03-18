@@ -267,6 +267,10 @@ server {
     access_log /var/log/nginx/iptv-panel.access.log;
     error_log /var/log/nginx/iptv-panel.error.log;
 
+    # Disable automatic HTTPS redirects
+    port_in_redirect off;
+    absolute_redirect off;
+
     # Root location - proxy to Node.js
     location / {
         proxy_pass http://iptv_backend;
@@ -277,10 +281,13 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto http;
 
         proxy_cache_bypass $http_upgrade;
         proxy_redirect off;
+
+        # Disable any redirects to HTTPS
+        proxy_redirect https:// http://;
 
         # Timeouts
         proxy_connect_timeout 60s;

@@ -15,8 +15,12 @@ const streamRoutes = require('./routes/streams');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Security middleware
-app.use(helmet());
+// Security middleware - configured for HTTP only
+app.use(helmet({
+  hsts: false, // Disable HTTP Strict Transport Security (allows HTTP)
+  contentSecurityPolicy: false, // Disable CSP for now to avoid mixed content issues
+  referrerPolicy: { policy: 'no-referrer' }
+}));
 app.use(cors());
 
 // Rate limiting
@@ -29,6 +33,16 @@ app.use('/api/', limiter);
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Disable x-powered-by header
+app.disable('x-powered-by');
+
+// Ensure we're not redirecting to HTTPS
+app.use((req, res, next) => {
+  // Prevent any automatic HTTPS redirects
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
 
 // Static files for admin panel
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
