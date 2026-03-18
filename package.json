@@ -8,6 +8,8 @@
     "build": "run-s build:*",
     "build:css": "npm run generate:css -- --minify",
     "build:remix": "remix build",
+    "build:selfhost": "run-s build:css build:remix-selfhost",
+    "build:remix-selfhost": "remix build",
     "dev": "run-p dev:*",
     "dev:css": "npm run generate:css -- --watch",
     "dev:remix": "remix dev",
