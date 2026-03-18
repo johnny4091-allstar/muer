@@ -149,9 +149,18 @@ install_npm_dependencies() {
     print_info "Installing npm dependencies..."
 
     cd "$APP_DIR"
-    npm install --production
+    npm install
 
     print_success "Dependencies installed"
+}
+
+build_application() {
+    print_info "Building application..."
+
+    cd "$APP_DIR"
+    npm run build
+
+    print_success "Application built"
 }
 
 create_env_file() {
@@ -282,8 +291,8 @@ start_application() {
     # Stop existing process if any
     pm2 delete $APP_NAME 2>/dev/null || true
 
-    # Start application
-    pm2 start npm --name "$APP_NAME" -- start
+    # Start application using selfhost script for VPS deployment
+    pm2 start npm --name "$APP_NAME" -- run selfhost
 
     # Save PM2 process list
     pm2 save
@@ -322,7 +331,7 @@ After=network.target
 Type=forking
 User=root
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/pm2 start $APP_DIR/npm --name $APP_NAME -- start
+ExecStart=/usr/bin/pm2 start $APP_DIR/npm --name $APP_NAME -- run selfhost
 ExecReload=/usr/bin/pm2 reload $APP_NAME
 ExecStop=/usr/bin/pm2 stop $APP_NAME
 Restart=on-failure
@@ -416,6 +425,7 @@ main() {
     install_npm_dependencies
     create_env_file
     setup_database
+    build_application
     configure_nginx
     start_application
     configure_firewall
