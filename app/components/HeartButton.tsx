@@ -1,8 +1,9 @@
 import { HeartIcon } from "@heroicons/react/24/outline";
-import Lottie from "lottie-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { t } from "~/utils";
 import heartAnimation from "../../public/heart.json";
+
+const Lottie = lazy(() => import("lottie-react"));
 
 export default function HeartButton({ playingVideoData, onHeartClick, hearted }: any) {
     const lottieRef = useRef<any>();
@@ -37,13 +38,15 @@ export default function HeartButton({ playingVideoData, onHeartClick, hearted }:
         "
         >
             
-            <Lottie
-                lottieRef={lottieRef}
-                autoplay={true}
-                loop={false}
-                animationData={heartAnimation}
-                className='w-32 h-32 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-                ' />
+            <Suspense fallback={null}>
+                <Lottie
+                    lottieRef={lottieRef}
+                    autoplay={true}
+                    loop={false}
+                    animationData={heartAnimation}
+                    className='w-32 h-32 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                    ' />
+            </Suspense>
 
         </div>}
     </div>

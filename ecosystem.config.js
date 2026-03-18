@@ -1,4 +1,6 @@
 /** @type {import('pm2').StartOptions} */
+require("dotenv").config();
+
 module.exports = {
   apps: [
     {
@@ -10,6 +12,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 3000,
+        ...process.env,
       },
       // Restart automatically if it crashes
       autorestart: true,

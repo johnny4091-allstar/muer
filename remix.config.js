@@ -1,13 +1,9 @@
 /** @type {import('@remix-run/dev').AppConfig} */
+const isNetlify = process.env.NETLIFY || process.env.NETLIFY_LOCAL;
+
 module.exports = {
-  serverBuildTarget: "netlify",
-  server:
-    process.env.NETLIFY || process.env.NETLIFY_LOCAL
-      ? "./server.js"
-      : undefined,
+  serverBuildTarget: isNetlify ? "netlify" : undefined,
+  server: isNetlify ? "./server.js" : undefined,
+  serverBuildPath: isNetlify ? undefined : "build/index.js",
   ignoredRouteFiles: ["**/.*"],
-  // appDirectory: "app",
-  // assetsBuildDirectory: "public/build",
-  // serverBuildPath: ".netlify/functions-internal/server.js",
-  // publicPath: "/build/",
 };

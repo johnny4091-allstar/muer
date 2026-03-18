@@ -12,7 +12,8 @@ import CImage from "~/components/cimage";
 import VideoListThumbnail from "~/components/videoListThumbnail";
 import VideoThumbnail from "~/components/videoThumbnail";
 import { randomFetch } from "~/utils";
-import Lottie from "lottie-react";
+import { lazy, Suspense } from "react";
+const Lottie = lazy(() => import("lottie-react"));
 import spectrumAnimation from "../../public/spectrum.json";
 
 
@@ -47,12 +48,14 @@ export default function RadioPage() {
                         className="group/row cursor-pointer transition-all duration-150 ">
                                         <td className="w-16 pl-6 group-hover/row:bg-white/8 rounded-l-lg text-green-500">
                                             <div className="group-hover/row:hidden w-8 h-8 overflow-hidden relative">
-                                                <Lottie
-                                                // lottieRef={lottieRef}
-                                                autoplay={true}
-                                                loop={true}
-                                                animationData={spectrumAnimation}
-                                                className='w-16 h-16 absolute -top-4 -left-4' />
+                                                <Suspense fallback={null}>
+                                                    <Lottie
+                                                    // lottieRef={lottieRef}
+                                                    autoplay={true}
+                                                    loop={true}
+                                                    animationData={spectrumAnimation}
+                                                    className='w-16 h-16 absolute -top-4 -left-4' />
+                                                </Suspense>
                                             </div>
                                             <div className="hidden group-hover/row:flex text-white w-8 h-8  items-center justify-end">{
                                                 <PlayIcon className="w-4 h-4"/>
