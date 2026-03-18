@@ -137,9 +137,14 @@ clone_repository() {
     # Clone the repository
     git clone https://github.com/johnny4091-allstar/muer.git temp_clone
 
-    # Move files from temp directory
-    mv temp_clone/* "$APP_DIR/" 2>/dev/null || true
-    mv temp_clone/.* "$APP_DIR/" 2>/dev/null || true
+    # Move IPTV backend files from temp directory
+    if [ -d "temp_clone/iptv-backend" ]; then
+        mv temp_clone/iptv-backend/* "$APP_DIR/" 2>/dev/null || true
+        mv temp_clone/iptv-backend/.* "$APP_DIR/" 2>/dev/null || true
+    else
+        mv temp_clone/* "$APP_DIR/" 2>/dev/null || true
+        mv temp_clone/.* "$APP_DIR/" 2>/dev/null || true
+    fi
     rm -rf temp_clone
 
     print_success "Repository cloned"
@@ -149,18 +154,18 @@ install_npm_dependencies() {
     print_info "Installing npm dependencies..."
 
     cd "$APP_DIR"
-    npm install
+    npm install --production
 
     print_success "Dependencies installed"
 }
 
-build_application() {
-    print_info "Building application..."
+initialize_database() {
+    print_info "Initializing database..."
 
     cd "$APP_DIR"
-    npm run build
+    node scripts/init-db.js
 
-    print_success "Application built"
+    print_success "Database initialized"
 }
 
 create_env_file() {
@@ -291,8 +296,8 @@ start_application() {
     # Stop existing process if any
     pm2 delete $APP_NAME 2>/dev/null || true
 
-    # Start application using selfhost script for VPS deployment
-    pm2 start npm --name "$APP_NAME" -- run selfhost
+    # Start application
+    pm2 start npm --name "$APP_NAME" -- start
 
     # Save PM2 process list
     pm2 save
@@ -331,7 +336,7 @@ After=network.target
 Type=forking
 User=root
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/pm2 start $APP_DIR/npm --name $APP_NAME -- run selfhost
+ExecStart=/usr/bin/pm2 start $APP_DIR/npm --name $APP_NAME -- start
 ExecReload=/usr/bin/pm2 reload $APP_NAME
 ExecStop=/usr/bin/pm2 stop $APP_NAME
 Restart=on-failure
@@ -425,7 +430,7 @@ main() {
     install_npm_dependencies
     create_env_file
     setup_database
-    build_application
+    initialize_database
     configure_nginx
     start_application
     configure_firewall
