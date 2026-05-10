@@ -16,6 +16,8 @@ from flask import Flask, Response, jsonify, render_template, request, session, s
 
 app = Flask(__name__)
 
+SERVER_VERSION = "5"  # bump when deploying — lets user confirm update worked
+
 PORT    = int(os.environ.get("RADIO_PORT", 5000))
 HOST    = os.environ.get("RADIO_HOST", "0.0.0.0")
 DATA_DIR = Path.home() / ".config" / "radio-player"
@@ -96,6 +98,11 @@ def _fav_file() -> Path:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/version")
+def version():
+    return jsonify({"version": SERVER_VERSION})
 
 
 # ── Radio station routes ──────────────────────────────────────────
