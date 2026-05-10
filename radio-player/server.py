@@ -321,27 +321,42 @@ def music_stream_route():
 
     query = f"{artist} {name}" if artist else name
 
+    # Check yt-dlp is available before touching the response
+    try:
+        subprocess.run(["yt-dlp", "--version"],
+                       capture_output=True, timeout=5, check=True)
+    except FileNotFoundError:
+        return jsonify({"error": "yt-dlp not installed — run update.sh"}), 503
+    except Exception:
+        return jsonify({"error": "yt-dlp unavailable"}), 503
+
+    # Launch yt-dlp and wait for the first chunk before committing 200 OK.
+    # That way any failure returns a real HTTP error and the client can fall back.
+    try:
+        proc = subprocess.Popen(
+            [
+                "yt-dlp",
+                "-f", "bestaudio[ext=m4a]/bestaudio[acodec=mp4a]/bestaudio",
+                "--output", "-",
+                "--quiet",
+                "--no-warnings",
+                f"ytsearch1:{query}",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        first_chunk = proc.stdout.read(32768)   # blocks ~3-10 s while yt-dlp searches
+        if not first_chunk:
+            proc.kill()
+            return jsonify({"error": "Track not found or no audio available"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
     def generate():
+        yield first_chunk
         try:
-            proc = subprocess.Popen(
-                [
-                    "yt-dlp",
-                    "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
-                    "--output", "-",
-                    "--quiet",
-                    "--no-warnings",
-                    f"ytsearch1:{query}",
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-            )
             for chunk in iter(lambda: proc.stdout.read(65536), b""):
                 yield chunk
-        except FileNotFoundError:
-            # yt-dlp not installed — yield nothing, client falls back to preview
-            return
-        except Exception:
-            return
         finally:
             try:
                 proc.kill()
