@@ -51,6 +51,9 @@ audio.addEventListener('playing', () => {
   S.isPlaying = true;
   initAudioCtx();
   if (audioCtx?.state === 'suspended') audioCtx.resume();
+  // Clear the "Finding song…" loading indicator
+  if ($('np-stream-title').textContent.startsWith('⏳'))
+    $('np-stream-title').textContent = S.currentType === 'radio' ? '● LIVE' : '▶ Playing';
   updatePlayBtn(); updateNPBar(); refreshCards(); startViz();
   addToRecent(S.currentStation, S.currentType);
   updateMediaSession();
@@ -59,7 +62,18 @@ audio.addEventListener('pause',   () => { S.isPlaying = false; updatePlayBtn(); 
 audio.addEventListener('ended',   () => { S.isPlaying = false; updatePlayBtn(); stopViz(); });
 audio.addEventListener('waiting', () => { $('play-btn').classList.add('loading'); });
 audio.addEventListener('canplay', () => { $('play-btn').classList.remove('loading'); });
-audio.addEventListener('error',   () => { S.isPlaying = false; updatePlayBtn(); stopViz(); toast('Stream error — try another station'); });
+audio.addEventListener('error', () => {
+  // If full-song stream failed, try falling back to 30s iTunes preview
+  if (S.currentType === 'music' && S.currentStation?._previewUrl && audio.src !== S.currentStation._previewUrl) {
+    audio.src = S.currentStation._previewUrl;
+    audio.load();
+    audio.play().catch(() => toast('Tap Play to start'));
+    toast('Playing 30s preview (install yt-dlp for full songs)', 5000);
+    return;
+  }
+  S.isPlaying = false; updatePlayBtn(); stopViz();
+  toast('Stream error — try another station');
+});
 
 // ── Utilities ─────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -182,12 +196,14 @@ function handleCardClick(e, id, type) {
 
 // ── Track card ────────────────────────────────────────────────────
 function makeTrackCard(track) {
-  const id      = String(track.trackId);
-  const isPlay  = S.currentStation?._id === id && S.isPlaying;
-  const name    = track.trackName   || 'Unknown';
-  const artist  = track.artistName  || '';
-  const img     = (track.artworkUrl100 || '').replace('100x100bb', '600x600bb');
-  const hasPreview = !!track.previewUrl;
+  const id     = String(track.trackId);
+  const isPlay = S.currentStation?._id === id && S.isPlaying;
+  const name   = track.trackName  || 'Unknown';
+  const artist = track.artistName || '';
+  const img    = (track.artworkUrl100 || '').replace('100x100bb', '600x600bb');
+  // Duration from iTunes (milliseconds → m:ss)
+  const ms  = track.trackTimeMillis || 0;
+  const dur = ms ? `${Math.floor(ms/60000)}:${String(Math.floor((ms%60000)/1000)).padStart(2,'0')}` : '';
 
   return `<div class="card track-card${isPlay?' playing':''}" data-id="${esc(id)}" data-type="track"
       ondblclick="playTrackById('${esc(id)}')"
@@ -195,38 +211,40 @@ function makeTrackCard(track) {
     <div class="card-img-wrap">
       <div class="card-img">
         ${img ? `<img src="${esc(img)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='🎵'">` : '🎵'}
-        ${!hasPreview ? '<div class="no-preview-badge">No preview</div>' : ''}
       </div>
-      ${hasPreview ? `<button class="card-play-btn" onclick="event.stopPropagation();playTrackById('${esc(id)}')">${isPlay?'⏸':'▶'}</button>` : ''}
-      ${hasPreview ? '<span class="preview-badge">30s</span>' : ''}
+      <button class="card-play-btn" onclick="event.stopPropagation();playTrackById('${esc(id)}')">${isPlay?'⏸':'▶'}</button>
     </div>
     <div class="card-name">${esc(name)}${isPlay?'<span class="playing-bars"><span></span><span></span><span></span></span>':''}</div>
-    <div class="card-artist">${esc(artist)}</div>
+    <div class="card-artist">${esc(artist)}${dur ? `<span class="track-dur"> · ${esc(dur)}</span>` : ''}</div>
   </div>`;
 }
 
 // ── Play track ────────────────────────────────────────────────────
 function playTrack(track) {
   if (!track) return;
-  const url = track.previewUrl;
-  if (!url) { toast('No preview available for this track'); return; }
+  const streamUrl = `/api/music/stream?name=${encodeURIComponent(track.trackName||'')}&artist=${encodeURIComponent(track.artistName||'')}`;
+  const art = (track.artworkUrl100 || '').replace('100x100bb', '600x600bb');
+
   S.currentStation = {
     _id:          String(track.trackId),
-    name:         track.trackName    || 'Unknown Track',
-    favicon:      (track.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
-    country:      track.artistName   || '',
-    tags:         track.primaryGenreName || 'Music',
-    url_resolved: url,
+    name:         track.trackName         || 'Unknown Track',
+    favicon:      art,
+    country:      track.artistName        || '',
+    tags:         track.primaryGenreName  || 'Music',
+    url_resolved: streamUrl,
     stationuuid:  String(track.trackId),
+    _previewUrl:  track.previewUrl || '',  // fallback if yt-dlp unavailable
   };
   S.currentType = 'music';
-  audio.src = url;
+
+  $('np-stream-title').textContent = '⏳ Finding song…';
+  audio.src = streamUrl;
   audio.load();
   audio.play().catch(() => toast('Tap Play to start'));
   updateNPBar();
   refreshCards();
-  document.title = track.trackName + ' — Radio Player';
-  setHeroGradient(S.currentStation.favicon);
+  document.title = (track.trackName || 'Music') + ' — Radio Player';
+  setHeroGradient(art);
 }
 
 function playTrackById(id) {

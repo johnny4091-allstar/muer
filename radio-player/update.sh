@@ -13,10 +13,14 @@ rm -rf "$TMP"
 git clone --depth 1 --branch "$BRANCH" "$REPO" "$TMP" --quiet
 
 echo "[INFO] Copying updated files..."
-cp -r "$TMP/radio-player/static"    "$INSTALL/"
-cp -r "$TMP/radio-player/templates" "$INSTALL/"
-cp    "$TMP/radio-player/server.py" "$INSTALL/"
-cp    "$TMP/radio-player/update.sh" "$INSTALL/"
+cp -r "$TMP/radio-player/static"          "$INSTALL/"
+cp -r "$TMP/radio-player/templates"       "$INSTALL/"
+cp    "$TMP/radio-player/server.py"       "$INSTALL/"
+cp    "$TMP/radio-player/update.sh"       "$INSTALL/"
+cp    "$TMP/radio-player/requirements.txt" "$INSTALL/"
+
+echo "[INFO] Installing/upgrading Python dependencies (includes yt-dlp)..."
+pip3 install -r "$INSTALL/requirements.txt" -q --upgrade
 
 rm -rf "$TMP"
 echo "[INFO] Restarting service..."

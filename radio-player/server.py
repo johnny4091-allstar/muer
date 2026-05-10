@@ -5,13 +5,14 @@ import hashlib
 import json
 import os
 import secrets
+import subprocess
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import requests
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, Response, jsonify, render_template, request, session, stream_with_context
 
 app = Flask(__name__)
 
@@ -308,6 +309,50 @@ def music_search_route():
     if not q:
         return jsonify([])
     return jsonify(_itunes_tracks(q, 30))
+
+
+@app.route("/api/music/stream")
+def music_stream_route():
+    """Stream full audio for a track via yt-dlp piped to the response."""
+    name   = request.args.get("name",   "").strip()
+    artist = request.args.get("artist", "").strip()
+    if not name:
+        return jsonify({"error": "no track name"}), 400
+
+    query = f"{artist} {name}" if artist else name
+
+    def generate():
+        try:
+            proc = subprocess.Popen(
+                [
+                    "yt-dlp",
+                    "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+                    "--output", "-",
+                    "--quiet",
+                    "--no-warnings",
+                    f"ytsearch1:{query}",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            for chunk in iter(lambda: proc.stdout.read(65536), b""):
+                yield chunk
+        except FileNotFoundError:
+            # yt-dlp not installed — yield nothing, client falls back to preview
+            return
+        except Exception:
+            return
+        finally:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="audio/mp4",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"},
+    )
 
 
 PODCAST_CATEGORIES = [
