@@ -313,7 +313,7 @@ def music_search_route():
 
 @app.route("/api/music/stream")
 def music_stream_route():
-    """Stream full audio for a track via yt-dlp piped to the response."""
+    """Resolve track via yt-dlp then proxy the CDN audio with the correct MIME type."""
     name   = request.args.get("name",   "").strip()
     artist = request.args.get("artist", "").strip()
     if not name:
@@ -321,51 +321,60 @@ def music_stream_route():
 
     query = f"{artist} {name}" if artist else name
 
-    # Check yt-dlp is available before touching the response
+    # Step 1 — ask yt-dlp for the direct CDN URL + format extension (no download).
+    # Using --print avoids piping the binary stream and lets us set the correct MIME type.
     try:
-        subprocess.run(["yt-dlp", "--version"],
-                       capture_output=True, timeout=5, check=True)
-    except FileNotFoundError:
-        return jsonify({"error": "yt-dlp not installed — run update.sh"}), 503
-    except Exception:
-        return jsonify({"error": "yt-dlp unavailable"}), 503
-
-    # Launch yt-dlp and wait for the first chunk before committing 200 OK.
-    # That way any failure returns a real HTTP error and the client can fall back.
-    try:
-        proc = subprocess.Popen(
+        result = subprocess.run(
             [
                 "yt-dlp",
                 "-f", "bestaudio[ext=m4a]/bestaudio[acodec=mp4a]/bestaudio",
-                "--output", "-",
-                "--quiet",
-                "--no-warnings",
+                "--print", "%(url)s|||%(ext)s",
+                "--quiet", "--no-warnings",
                 f"ytsearch1:{query}",
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=30,
         )
-        first_chunk = proc.stdout.read(32768)   # blocks ~3-10 s while yt-dlp searches
-        if not first_chunk:
-            proc.kill()
-            return jsonify({"error": "Track not found or no audio available"}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except FileNotFoundError:
+        return jsonify({"error": "yt-dlp not installed — run update.sh"}), 503
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "yt-dlp timed out searching for track"}), 504
 
+    output = result.stdout.strip()
+    if not output or "|||" not in output:
+        return jsonify({"error": "Track not found on YouTube"}), 404
+
+    cdn_url, ext = output.split("|||", 1)
+    cdn_url = cdn_url.strip()
+    ext     = ext.strip().lower()
+
+    ct_map = {"m4a": "audio/mp4", "mp4": "audio/mp4",
+              "webm": "audio/webm", "mp3": "audio/mpeg",
+              "ogg": "audio/ogg",   "opus": "audio/ogg"}
+    content_type = ct_map.get(ext, "audio/webm")
+
+    # Step 2 — proxy the CDN URL through Flask so the browser avoids CORS.
     def generate():
-        yield first_chunk
         try:
-            for chunk in iter(lambda: proc.stdout.read(65536), b""):
-                yield chunk
-        finally:
-            try:
-                proc.kill()
-            except Exception:
-                pass
+            with requests.get(
+                cdn_url, stream=True, timeout=60,
+                headers={
+                    "User-Agent":
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0 Safari/537.36",
+                    "Referer": "https://www.youtube.com/",
+                    "Origin":  "https://www.youtube.com",
+                },
+            ) as r:
+                for chunk in r.iter_content(chunk_size=65536):
+                    if chunk:
+                        yield chunk
+        except Exception:
+            pass
 
     return Response(
         stream_with_context(generate()),
-        content_type="audio/mp4",
+        content_type=content_type,
         headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"},
     )
 
