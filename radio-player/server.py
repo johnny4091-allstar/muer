@@ -311,68 +311,128 @@ def music_search_route():
     return jsonify(_itunes_tracks(q, 30))
 
 
+def _ydlp_bin():
+    """Return path to yt-dlp binary, checking common locations."""
+    import shutil
+    for candidate in [shutil.which("yt-dlp"), "/usr/local/bin/yt-dlp", "/usr/bin/yt-dlp"]:
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _resolve_stream(query):
+    """Return (cdn_url, ext) for the best audio of query, or (None, None)."""
+    # ── Attempt 1: Python API ──────────────────────────────────────────
+    try:
+        import yt_dlp as ytdlp
+        ydl_opts = {
+            "format": "bestaudio",
+            "quiet": True,
+            "no_warnings": True,
+            "socket_timeout": 20,
+        }
+        with ytdlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+        if info:
+            entry = info
+            if "entries" in info:
+                entries = [e for e in (info.get("entries") or []) if e]
+                entry = entries[0] if entries else None
+            if entry:
+                url = entry.get("url", "")
+                ext = (entry.get("ext") or "webm").lower()
+                if url and url.startswith("http"):
+                    return url, ext
+    except Exception:
+        pass  # fall through to CLI
+
+    # ── Attempt 2: CLI with -j (dump JSON) ────────────────────────────
+    bin_path = _ydlp_bin()
+    if bin_path:
+        try:
+            result = subprocess.run(
+                [bin_path, "-j", "--format", "bestaudio", "--no-playlist",
+                 f"ytsearch1:{query}"],
+                capture_output=True, text=True, timeout=60,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                info = json.loads(result.stdout.strip().splitlines()[-1])
+                # Try top-level url first, then pick best from formats list
+                url = info.get("url", "")
+                ext = (info.get("ext") or "webm").lower()
+                if not url or not url.startswith("http"):
+                    for fmt in reversed(info.get("formats", [])):
+                        if fmt.get("acodec") not in (None, "none") and fmt.get("url", "").startswith("http"):
+                            url = fmt["url"]
+                            ext = (fmt.get("ext") or "webm").lower()
+                            break
+                if url and url.startswith("http"):
+                    return url, ext
+        except Exception:
+            pass
+
+    return None, None
+
+
+@app.route("/api/music/stream/check")
+def music_stream_check():
+    """Diagnostic: report yt-dlp availability."""
+    import shutil
+    status = {}
+    try:
+        import yt_dlp
+        status["python_api"] = True
+        status["python_version"] = getattr(yt_dlp.version, "__version__", "?")
+    except ImportError as e:
+        status["python_api"] = False
+        status["python_error"] = str(e)
+    bin_path = _ydlp_bin()
+    status["cli_path"] = bin_path
+    if bin_path:
+        try:
+            r = subprocess.run([bin_path, "--version"], capture_output=True, text=True, timeout=5)
+            status["cli_version"] = r.stdout.strip()
+            status["cli_ok"] = r.returncode == 0
+        except Exception as e:
+            status["cli_ok"] = False
+            status["cli_error"] = str(e)
+    else:
+        status["cli_ok"] = False
+    return jsonify(status)
+
+
 @app.route("/api/music/stream")
 def music_stream_route():
-    """Resolve track via yt-dlp Python API then proxy CDN audio with correct MIME type."""
+    """Resolve track via yt-dlp then proxy CDN audio with correct MIME type."""
     name   = request.args.get("name",   "").strip()
     artist = request.args.get("artist", "").strip()
     if not name:
         return jsonify({"error": "no track name"}), 400
 
     query = f"{artist} {name}" if artist else name
+    cdn_url, ext = _resolve_stream(query)
 
-    try:
-        import yt_dlp as ytdlp
-    except ImportError:
-        return jsonify({"error": "yt-dlp not installed — run update.sh"}), 503
-
-    # Extract info (no download) to get the real CDN URL and format
-    ydl_opts = {
-        "format": "bestaudio",
-        "quiet": True,
-        "no_warnings": True,
-        "socket_timeout": 20,
-    }
-    try:
-        with ytdlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-    if not info:
-        return jsonify({"error": "No results found"}), 404
-
-    # ytsearch wraps results in an "entries" list
-    entry = info
-    if "entries" in info:
-        entries = [e for e in (info["entries"] or []) if e]
-        if not entries:
-            return jsonify({"error": "No results found"}), 404
-        entry = entries[0]
-
-    cdn_url = entry.get("url", "")
-    ext     = (entry.get("ext") or "webm").lower()
-
-    if not cdn_url or not cdn_url.startswith("http"):
-        return jsonify({"error": "No audio URL resolved"}), 404
+    if not cdn_url:
+        bin_path = _ydlp_bin()
+        if not bin_path:
+            return jsonify({"error": "yt-dlp not installed — run update.sh"}), 503
+        return jsonify({"error": "Could not resolve stream URL"}), 500
 
     ct_map = {
-        "m4a": "audio/mp4",  "mp4": "audio/mp4",
+        "m4a": "audio/mp4", "mp4": "audio/mp4",
         "webm": "audio/webm", "mp3": "audio/mpeg",
         "ogg": "audio/ogg",  "opus": "audio/ogg",
     }
     content_type = ct_map.get(ext, "audio/webm")
 
-    # Proxy CDN → client so the browser never hits a CORS-blocked URL
     def generate():
         try:
             with requests.get(
                 cdn_url, stream=True, timeout=60,
                 headers={
-                    "User-Agent":
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/124.0 Safari/537.36",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                  "Chrome/124.0 Safari/537.36",
                     "Referer": "https://www.youtube.com/",
                 },
             ) as r:
