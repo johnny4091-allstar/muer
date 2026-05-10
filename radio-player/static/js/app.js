@@ -22,7 +22,11 @@ const S = {
   pwaPrompt: null,
   currentView: 'home',
   fullscreenOpen: false,
-  podcastDetail: null,   // current podcast for episode panel
+  podcastDetail: null,
+  user: null,                           // logged-in username or null
+  currentListStations: [],              // unfiltered list for filter bar
+  currentListGrid: 'station-grid',      // grid element id to render into
+  filter: { sort: 'default', minBitrate: 0, hasLogo: false },
 };
 
 // ── Audio + Web Audio API ─────────────────────────────────────────
@@ -487,6 +491,8 @@ const VIEWS = ['home','all','search','podcasts','library','recent'];
 function showView(name) {
   VIEWS.forEach(v => $(`view-${v}`).style.display = v === name ? '' : 'none');
   S.currentView = name;
+  // Show filter bar only for list views that have stations
+  $('filter-bar').style.display = (name === 'all' || name === 'search') ? '' : 'none';
 }
 
 function setNavActive(id) {
@@ -516,15 +522,17 @@ const Nav = {
   },
   trending() {
     $('section-title').textContent = '🔥 Trending';
-    $('station-count').textContent = S.trendingStations.length + ' stations';
-    $('station-grid').innerHTML = S.trendingStations.map(s => makeCard(s)).join('');
+    S.currentListStations = S.trendingStations;
+    S.currentListGrid = 'station-grid';
     showView('all'); setNavActive('nav-home');
+    renderFilteredList();
   },
   showAllTop() {
     $('section-title').textContent = 'Top Stations';
-    $('station-count').textContent = S.topStations.length + ' stations';
-    $('station-grid').innerHTML = S.topStations.map(s => makeCard(s)).join('');
+    S.currentListStations = S.topStations;
+    S.currentListGrid = 'station-grid';
     showView('all'); setNavActive('nav-home');
+    renderFilteredList();
   },
 };
 
@@ -556,7 +564,6 @@ async function doSearch(q) {
   showView('search'); setNavActive('nav-search');
   $('search-title').textContent = `Results for "${q}"`;
   const data = await apiFetch('/api/search?q=' + encodeURIComponent(q));
-  // Also search podcasts via iTunes
   let pods = [];
   try {
     const pr = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=podcast&limit=8&media=podcast`);
@@ -567,10 +574,16 @@ async function doSearch(q) {
   data.forEach(s => register(s, 'radio'));
   pods.forEach(p => { p._id = String(p.collectionId); register(p, 'podcast'); });
 
+  // Store station results for filter bar; podcast results rendered separately
+  S.currentListStations = data;
+  S.currentListGrid = 'search-grid';
+
+  const podsHtml = pods.length
+    ? '<div class="section-header" style="margin-top:20px"><span class="section-label">PODCASTS</span></div>' + pods.map(p => makeCard(p,'podcast')).join('')
+    : '';
+  // renderFilteredList will write to search-grid; append podcasts after
+  renderFilteredList(podsHtml);
   $('search-count').textContent = (data.length + pods.length) + ' results';
-  const stationsHtml = data.length ? data.map(s => makeCard(s)).join('') : '';
-  const podsHtml     = pods.length ? '<div class="section-header" style="margin-top:20px"><span class="section-label">PODCASTS</span></div>' + pods.map(p => makeCard(p,'podcast')).join('') : '';
-  $('search-grid').innerHTML = (stationsHtml + podsHtml) || '<div class="empty-state"><div class="icon">🔍</div><p>No results</p></div>';
 }
 
 // ── Library ───────────────────────────────────────────────────────
@@ -611,9 +624,10 @@ async function loadSidebarData() {
       $('section-title').textContent = '🌍 ' + country;
       const data = await apiFetch('/api/country/' + encodeURIComponent(country));
       data.forEach(s => register(s, 'radio'));
-      $('station-count').textContent = data.length + ' stations';
-      $('station-grid').innerHTML = data.map(s => makeCard(s)).join('');
+      S.currentListStations = data;
+      S.currentListGrid = 'station-grid';
       showView('all');
+      renderFilteredList();
     }));
 
   $('genre-list').querySelectorAll('.sidebar-item').forEach(el =>
@@ -623,9 +637,10 @@ async function loadSidebarData() {
       $('section-title').textContent = '🎵 ' + cap(tag);
       const data = await apiFetch('/api/tag/' + encodeURIComponent(tag));
       data.forEach(s => register(s, 'radio'));
-      $('station-count').textContent = data.length + ' stations';
-      $('station-grid').innerHTML = data.map(s => makeCard(s)).join('');
+      S.currentListStations = data;
+      S.currentListGrid = 'station-grid';
       showView('all');
+      renderFilteredList();
     }));
 }
 
@@ -853,6 +868,166 @@ document.addEventListener('keydown', e => {
   km[e.code]?.();
 });
 
+// ── Filter & Sort ─────────────────────────────────────────────────
+function _applyFilter(stations) {
+  let r = [...stations];
+  if (S.filter.minBitrate > 0) r = r.filter(s => (s.bitrate || 0) >= S.filter.minBitrate);
+  if (S.filter.hasLogo)        r = r.filter(s => !!s.favicon);
+  switch (S.filter.sort) {
+    case 'name':    r.sort((a,b) => (a.name||'').localeCompare(b.name||'')); break;
+    case 'votes':   r.sort((a,b) => (b.votes||0) - (a.votes||0)); break;
+    case 'bitrate': r.sort((a,b) => (b.bitrate||0) - (a.bitrate||0)); break;
+    case 'country': r.sort((a,b) => (a.country||'').localeCompare(b.country||'')); break;
+  }
+  return r;
+}
+
+function renderFilteredList(appendHtml = '') {
+  const filtered = _applyFilter(S.currentListStations);
+  const grid = $(S.currentListGrid);
+  if (!grid) return;
+  grid.innerHTML = (filtered.length
+    ? filtered.map(s => makeCard(s)).join('')
+    : '<div class="empty-state"><div class="icon">🔍</div><p>No stations match the filter</p></div>'
+  ) + appendHtml;
+  // Update count label
+  const countEl = S.currentListGrid === 'station-grid' ? $('station-count') : $('search-count');
+  if (countEl) countEl.textContent = filtered.length + ' stations';
+  $('filter-count').textContent = filtered.length + ' of ' + S.currentListStations.length;
+  // Show/hide clear button
+  const isActive = S.filter.sort !== 'default' || S.filter.minBitrate > 0 || S.filter.hasLogo;
+  $('filter-clear').style.display = isActive ? '' : 'none';
+}
+
+function filterSort(val) {
+  S.filter.sort = val;
+  renderFilteredList();
+}
+
+function filterBitrate(el, val) {
+  S.filter.minBitrate = val;
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  renderFilteredList();
+}
+
+function filterHasLogo(checked) {
+  S.filter.hasLogo = checked;
+  renderFilteredList();
+}
+
+function clearFilters() {
+  S.filter = { sort: 'default', minBitrate: 0, hasLogo: false };
+  $('sort-select').value = 'default';
+  document.querySelectorAll('.filter-pill').forEach((p,i) => p.classList.toggle('active', i===0));
+  $('logo-only').checked = false;
+  $('filter-clear').style.display = 'none';
+  renderFilteredList();
+}
+
+// ── Auth ──────────────────────────────────────────────────────────
+const Auth = {
+  async init() {
+    try {
+      const r = await fetch('/api/auth/me');
+      const d = await r.json();
+      S.user = d.username || null;
+    } catch(e) { S.user = null; }
+    this._updateUI();
+  },
+
+  _updateUI() {
+    const btn = $('user-btn');
+    if (S.user) {
+      btn.textContent = S.user[0].toUpperCase();   // first letter avatar
+      btn.title = S.user + ' (click to manage account)';
+      btn.classList.add('signed-in');
+    } else {
+      btn.textContent = '👤';
+      btn.title = 'Sign In / Create Account';
+      btn.classList.remove('signed-in');
+    }
+  },
+
+  async login() {
+    const u = $('login-username').value.trim();
+    const p = $('login-password').value;
+    $('login-error').textContent = '';
+    if (!u || !p) { $('login-error').textContent = 'Please fill in all fields.'; return; }
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ username: u, password: p }),
+      });
+      const d = await r.json();
+      if (!r.ok) { $('login-error').textContent = d.error || 'Login failed.'; return; }
+      S.user = d.username;
+      this._updateUI();
+      closeModal('auth-modal');
+      toast('Welcome back, ' + d.username + '! ♥');
+      // Reload favorites from user account
+      await loadFavorites();
+      if (S.currentView === 'library') renderLibrary();
+    } catch(e) { $('login-error').textContent = 'Network error. Try again.'; }
+  },
+
+  async register() {
+    const u = $('reg-username').value.trim();
+    const p = $('reg-password').value;
+    const c = $('reg-confirm').value;
+    $('reg-error').textContent = '';
+    if (!u || !p || !c) { $('reg-error').textContent = 'Please fill in all fields.'; return; }
+    if (p !== c) { $('reg-error').textContent = 'Passwords do not match.'; return; }
+    try {
+      const r = await fetch('/api/auth/register', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ username: u, password: p }),
+      });
+      const d = await r.json();
+      if (!r.ok) { $('reg-error').textContent = d.error || 'Registration failed.'; return; }
+      S.user = d.username;
+      this._updateUI();
+      closeModal('auth-modal');
+      toast('Account created! Your favorites are now saved to ' + d.username + ' ♥');
+      await loadFavorites();
+    } catch(e) { $('reg-error').textContent = 'Network error. Try again.'; }
+  },
+
+  async logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    S.user = null;
+    this._updateUI();
+    closeModal('auth-modal');
+    toast('Signed out');
+    await loadFavorites();
+    if (S.currentView === 'library') renderLibrary();
+  },
+};
+
+function openAuthModal() {
+  // Show correct panel based on login state
+  const loggedIn = !!S.user;
+  $('auth-login-panel').style.display    = loggedIn ? 'none' : '';
+  $('auth-register-panel').style.display = 'none';
+  $('auth-loggedin-panel').style.display = loggedIn ? '' : 'none';
+  $('auth-tabs').style.display           = loggedIn ? 'none' : '';
+  if (loggedIn) $('auth-username-display').textContent = S.user;
+  // Reset forms
+  if (!loggedIn) {
+    ['login-username','login-password','reg-username','reg-password','reg-confirm'].forEach(id => $(id).value = '');
+    $('login-error').textContent = ''; $('reg-error').textContent = '';
+    switchAuthTab('login');
+  }
+  openModal('auth-modal');
+}
+
+function switchAuthTab(tab) {
+  $('auth-login-panel').style.display    = tab === 'login'    ? '' : 'none';
+  $('auth-register-panel').style.display = tab === 'register' ? '' : 'none';
+  $('tab-login').classList.toggle('active',    tab === 'login');
+  $('tab-register').classList.toggle('active', tab === 'register');
+}
+
 // ── Init ──────────────────────────────────────────────────────────
 async function init() {
   // Restore theme
@@ -867,6 +1042,7 @@ async function init() {
   loadRecentFromStorage();
   loadAlarms();
 
+  await Auth.init();
   await loadFavorites();
 
   // Bind events

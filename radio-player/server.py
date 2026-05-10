@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Radio Player — Flask web server for headless Ubuntu VPS."""
 
+import hashlib
 import json
 import os
+import secrets
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, session
 
 app = Flask(__name__)
 
@@ -17,9 +19,18 @@ PORT    = int(os.environ.get("RADIO_PORT", 5000))
 HOST    = os.environ.get("RADIO_HOST", "0.0.0.0")
 DATA_DIR = Path.home() / ".config" / "radio-player"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-FAVORITES_FILE    = DATA_DIR / "favorites.json"
-RECENT_FILE       = DATA_DIR / "recent.json"
-ALARM_FILE        = DATA_DIR / "alarms.json"
+FAVORITES_FILE = DATA_DIR / "favorites.json"
+RECENT_FILE    = DATA_DIR / "recent.json"
+ALARM_FILE     = DATA_DIR / "alarms.json"
+USERS_FILE     = DATA_DIR / "users.json"
+
+# Persistent secret key so sessions survive service restarts
+_skf = DATA_DIR / "secret.key"
+app.secret_key = _skf.read_text().strip() if _skf.exists() else None
+if not app.secret_key:
+    app.secret_key = secrets.token_hex(32)
+    _skf.write_text(app.secret_key)
+del _skf
 
 # ── Radio Browser API ─────────────────────────────────────────────
 MIRRORS = [
@@ -68,6 +79,15 @@ def _read_json(path: Path, default):
 
 def _write_json(path: Path, data):
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def _hash_pw(password: str, salt: str) -> str:
+    return hashlib.sha256((salt + password).encode()).hexdigest()
+
+
+def _fav_file() -> Path:
+    username = session.get("username")
+    return DATA_DIR / f"favs_{username}.json" if username else FAVORITES_FILE
 
 
 # ── Frontend ──────────────────────────────────────────────────────
@@ -130,11 +150,56 @@ def api_trending():
     return jsonify(_api_get("/json/stations/topvote/50", ttl=300))
 
 
+# ── Auth ──────────────────────────────────────────────────────────
+
+@app.route("/api/auth/me")
+def auth_me():
+    return jsonify({"username": session.get("username")})
+
+
+@app.route("/api/auth/register", methods=["POST"])
+def auth_register():
+    data = request.get_json() or {}
+    username = (data.get("username") or "").strip().lower()
+    password = data.get("password") or ""
+    if len(username) < 3 or not username.replace("_", "").isalnum():
+        return jsonify({"error": "Username: 3+ letters/numbers/underscores"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters"}), 400
+    users = _read_json(USERS_FILE, {})
+    if username in users:
+        return jsonify({"error": "Username already taken"}), 409
+    salt = secrets.token_hex(16)
+    users[username] = {"hash": _hash_pw(password, salt), "salt": salt, "created": time.time()}
+    _write_json(USERS_FILE, users)
+    session["username"] = username
+    return jsonify({"ok": True, "username": username})
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    data = request.get_json() or {}
+    username = (data.get("username") or "").strip().lower()
+    password = data.get("password") or ""
+    users = _read_json(USERS_FILE, {})
+    user = users.get(username)
+    if not user or _hash_pw(password, user["salt"]) != user["hash"]:
+        return jsonify({"error": "Invalid username or password"}), 401
+    session["username"] = username
+    return jsonify({"ok": True, "username": username})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    session.pop("username", None)
+    return jsonify({"ok": True})
+
+
 # ── Favorites ─────────────────────────────────────────────────────
 
 @app.route("/api/favorites")
 def get_favorites():
-    return jsonify(list(_read_json(FAVORITES_FILE, {}).values()))
+    return jsonify(list(_read_json(_fav_file(), {}).values()))
 
 
 @app.route("/api/favorites", methods=["POST"])
@@ -142,17 +207,17 @@ def add_favorite():
     station = request.get_json()
     if not station or not station.get("stationuuid"):
         return jsonify({"error": "invalid"}), 400
-    favs = _read_json(FAVORITES_FILE, {})
+    favs = _read_json(_fav_file(), {})
     favs[station["stationuuid"]] = station
-    _write_json(FAVORITES_FILE, favs)
+    _write_json(_fav_file(), favs)
     return jsonify({"ok": True})
 
 
 @app.route("/api/favorites/<uuid>", methods=["DELETE"])
 def remove_favorite(uuid):
-    favs = _read_json(FAVORITES_FILE, {})
+    favs = _read_json(_fav_file(), {})
     favs.pop(uuid, None)
-    _write_json(FAVORITES_FILE, favs)
+    _write_json(_fav_file(), favs)
     return jsonify({"ok": True})
 
 

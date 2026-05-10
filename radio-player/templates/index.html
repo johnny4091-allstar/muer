@@ -61,10 +61,39 @@
       <button class="topbar-icon-btn" onclick="Nav.home()" title="Home">🏠</button>
       <button class="topbar-icon-btn" onclick="openModal('theme-modal')" title="Theme">🎨</button>
       <button class="topbar-icon-btn" id="install-btn" onclick="pwaInstall()" title="Install App" style="display:none">📲</button>
+      <button class="topbar-icon-btn" id="user-btn" onclick="openAuthModal()" title="Account">👤</button>
     </div>
   </div>
 
   <div id="content">
+
+    <!-- FILTER BAR -->
+    <div class="filter-bar" id="filter-bar" style="display:none">
+      <div class="filter-group">
+        <span class="filter-label">Sort</span>
+        <select class="filter-select" id="sort-select" onchange="filterSort(this.value)">
+          <option value="default">Default</option>
+          <option value="name">Name A–Z</option>
+          <option value="votes">Most Votes</option>
+          <option value="bitrate">Bitrate ↓</option>
+          <option value="country">Country</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Bitrate</span>
+        <div class="filter-pills">
+          <button class="filter-pill active" onclick="filterBitrate(this,0)">Any</button>
+          <button class="filter-pill" onclick="filterBitrate(this,64)">64k+</button>
+          <button class="filter-pill" onclick="filterBitrate(this,128)">128k+</button>
+          <button class="filter-pill" onclick="filterBitrate(this,320)">320k+</button>
+        </div>
+      </div>
+      <label class="filter-check">
+        <input type="checkbox" id="logo-only" onchange="filterHasLogo(this.checked)"> Logo only
+      </label>
+      <span class="filter-count" id="filter-count"></span>
+      <button class="filter-clear-btn" id="filter-clear" onclick="clearFilters()" style="display:none">Clear ×</button>
+    </div>
 
     <!-- HOME -->
     <div id="view-home">
@@ -332,6 +361,71 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary" onclick="closeModal('shortcuts-modal')">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- Auth -->
+<div class="modal-overlay" id="auth-modal">
+  <div class="modal auth-modal">
+    <!-- Tabs -->
+    <div class="auth-tabs" id="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign In</button>
+      <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Create Account</button>
+    </div>
+
+    <!-- Login form -->
+    <div id="auth-login-panel">
+      <div class="auth-field">
+        <label>Username</label>
+        <input type="text" id="login-username" placeholder="your username" autocomplete="username" onkeydown="if(event.key==='Enter')Auth.login()">
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')Auth.login()">
+      </div>
+      <div class="auth-error" id="login-error"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('auth-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="Auth.login()">Sign In</button>
+      </div>
+    </div>
+
+    <!-- Register form -->
+    <div id="auth-register-panel" style="display:none">
+      <div class="auth-field">
+        <label>Username</label>
+        <input type="text" id="reg-username" placeholder="3+ chars, letters/numbers" autocomplete="username">
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="reg-password" placeholder="6+ characters" autocomplete="new-password">
+      </div>
+      <div class="auth-field">
+        <label>Confirm Password</label>
+        <input type="password" id="reg-confirm" placeholder="repeat password" autocomplete="new-password" onkeydown="if(event.key==='Enter')Auth.register()">
+      </div>
+      <div class="auth-error" id="reg-error"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('auth-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="Auth.register()">Create Account</button>
+      </div>
+    </div>
+
+    <!-- Logged-in panel -->
+    <div id="auth-loggedin-panel" style="display:none">
+      <div class="auth-user-card">
+        <div class="auth-avatar">👤</div>
+        <div>
+          <div class="auth-username-display" id="auth-username-display">–</div>
+          <div class="auth-user-sub">Radio Player account · favorites synced</div>
+        </div>
+      </div>
+      <p class="auth-hint">Your saved stations are tied to this account. Sign in on any device to access them.</p>
+      <div class="modal-footer">
+        <button class="btn btn-danger" onclick="Auth.logout()">Sign Out</button>
+        <button class="btn btn-primary" onclick="closeModal('auth-modal')">Done</button>
+      </div>
     </div>
   </div>
 </div>

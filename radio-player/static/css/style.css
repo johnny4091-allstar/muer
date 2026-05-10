@@ -591,3 +591,91 @@ html, body {
   #vol-slider { width: 70px; }
   .tool-btn { padding: 3px 5px; font-size: 10px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  FILTER BAR                                                      */
+/* ═══════════════════════════════════════════════════════════════ */
+.filter-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  padding: 10px 0 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.filter-label {
+  font-size: 11px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap;
+}
+.filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.filter-select {
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text-1); padding: 6px 10px;
+  font-size: 12px; font-weight: 600; outline: none; cursor: pointer;
+  transition: border-color var(--trans);
+}
+.filter-select:focus { border-color: var(--green); }
+.filter-pills { display: flex; gap: 4px; }
+.filter-pill {
+  padding: 5px 12px; border-radius: 500px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-2); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all var(--trans); white-space: nowrap;
+}
+.filter-pill:hover { border-color: var(--text-2); color: var(--text-1); }
+.filter-pill.active { background: var(--text-1); color: #000; border-color: var(--text-1); }
+.filter-check {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: var(--text-2); cursor: pointer;
+}
+.filter-check input { accent-color: var(--green); cursor: pointer; }
+.filter-count { font-size: 11px; color: var(--text-3); margin-left: auto; white-space: nowrap; }
+.filter-clear-btn {
+  padding: 5px 12px; border-radius: 500px;
+  border: 1px solid var(--accent); background: transparent;
+  color: var(--accent); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all var(--trans);
+}
+.filter-clear-btn:hover { background: var(--accent); color: #fff; }
+
+@media (max-width: 768px) {
+  .filter-bar { padding: 8px 0 12px; gap: 8px; }
+  .filter-count { display: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  AUTH MODAL                                                      */
+/* ═══════════════════════════════════════════════════════════════ */
+.auth-modal { min-width: 320px; }
+.auth-tabs {
+  display: flex; gap: 0; margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.auth-tab {
+  flex: 1; padding: 10px; background: none; border: none;
+  color: var(--text-2); font-size: 14px; font-weight: 700;
+  cursor: pointer; border-bottom: 2px solid transparent;
+  transition: color var(--trans), border-color var(--trans);
+  margin-bottom: -1px;
+}
+.auth-tab:hover { color: var(--text-1); }
+.auth-tab.active { color: var(--text-1); border-bottom-color: var(--green); }
+.auth-field { margin-bottom: 14px; }
+.auth-field label { display: block; font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+.auth-field input {
+  width: 100%; background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text-1); padding: 10px 12px; font-size: 14px;
+  outline: none; transition: border-color var(--trans);
+}
+.auth-field input:focus { border-color: var(--green); }
+.auth-error { font-size: 12px; color: #e91429; min-height: 16px; margin-bottom: 4px; font-weight: 600; }
+.auth-user-card {
+  display: flex; align-items: center; gap: 16px;
+  background: var(--bg-raised); border-radius: 10px; padding: 16px;
+  margin-bottom: 14px;
+}
+.auth-avatar { font-size: 40px; line-height: 1; }
+.auth-username-display { font-size: 18px; font-weight: 700; color: var(--text-1); }
+.auth-user-sub { font-size: 11px; color: var(--green); margin-top: 3px; font-weight: 600; }
+.auth-hint { font-size: 12px; color: var(--text-2); line-height: 1.5; margin-bottom: 4px; }
+
+/* User button in topbar — shows username when signed in */
+#user-btn.signed-in { color: var(--green); font-weight: 700; font-size: 13px; padding: 5px 10px; border-radius: 500px; border: 1px solid var(--green); }
