@@ -1,0 +1,15 @@
+# *
+User-agent: *
+Allow: /
+
+# *
+User-agent: *
+Disallow: /admin/
+Disallow: /api/
+Disallow: /messages/
+
+# Host
+Host: https://streamzone.example.com
+
+# Sitemaps
+Sitemap: https://streamzone.example.com/sitemap.xml

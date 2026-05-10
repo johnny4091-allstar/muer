@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  # ─── PostgreSQL Database ─────────────────────────────────────────────────────
+  streamzone-db:
+    image: postgres:16-alpine
+    container_name: streamzone-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: streamzone
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_strong_password}
+      POSTGRES_DB: streamzone
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U streamzone"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - streamzone-net
+
+  # ─── StreamZone App ───────────────────────────────────────────────────────────
+  streamzone-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: streamzone-app
+    restart: unless-stopped
+    depends_on:
+      streamzone-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://streamzone:${POSTGRES_PASSWORD:-changeme_strong_password}@streamzone-db:5432/streamzone
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-this-secret}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-StreamZone <noreply@streamzone.local>}
+      NODE_ENV: production
+    volumes:
+      - upload_data:/app/public/uploads
+    expose:
+      - "3000"
+    networks:
+      - streamzone-net
+
+  # ─── Nginx Reverse Proxy ──────────────────────────────────────────────────────
+  streamzone-nginx:
+    image: nginx:alpine
+    container_name: streamzone-nginx
+    restart: unless-stopped
+    depends_on:
+      - streamzone-app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - streamzone-net
+
+volumes:
+  postgres_data:
+  upload_data:
+  nginx_logs:
+
+networks:
+  streamzone-net:
+    driver: bridge

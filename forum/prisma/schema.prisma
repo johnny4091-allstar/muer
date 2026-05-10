@@ -1,0 +1,468 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  LAUGH
+  ANGRY
+  SAD
+  HELPFUL
+  DISLIKE
+}
+
+enum NotificationType {
+  REPLY
+  MENTION
+  REACTION
+  NEW_POST_IN_SUBSCRIBED
+  BADGE_EARNED
+  DM_RECEIVED
+  WARNING_ISSUED
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+enum PlaylistStatus {
+  PENDING
+  VALID
+  INVALID
+  EXPIRED
+}
+
+// ─── USER & AUTH ──────────────────────────────────────────────────────────────
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  emailVerified      DateTime?
+  passwordHash       String?
+  name               String?
+  username           String    @unique
+  role               Role      @default(USER)
+  isBanned           Boolean   @default(false)
+  banReason          String?
+  isMuted            Boolean   @default(false)
+  muteExpiresAt      DateTime?
+  twoFactorEnabled   Boolean   @default(false)
+  twoFactorSecret    String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  lastSeenAt         DateTime  @default(now())
+
+  profile            Profile?
+  accounts           Account[]
+  sessions           Session[]
+  threads            Thread[]
+  posts              Post[]
+  reactions          Reaction[]
+  sentMessages       Message[]            @relation("SentMessages")
+  receivedMessages   Message[]            @relation("ReceivedMessages")
+  notifications      Notification[]
+  reports            Report[]             @relation("ReportedBy")
+  reportedUser       Report[]             @relation("ReportedUser")
+  playlists          Playlist[]
+  reviews            Review[]
+  pollVotes          PollVote[]
+  badges             UserBadge[]
+  subscriptions      ThreadSubscription[]
+  moderatorActions   AuditLog[]
+  warnings           Warning[]            @relation("WarnedUser")
+  issuedWarnings     Warning[]            @relation("IssuedByMod")
+}
+
+model Profile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  bio           String?
+  location      String?
+  avatarUrl     String?
+  website       String?
+  iptvSetupInfo String?
+  reputation    Int      @default(0)
+  postCount     Int      @default(0)
+  threadCount   Int      @default(0)
+  level         Int      @default(1)
+  customTitle   String?
+  showEmail     Boolean  @default(false)
+  showOnline    Boolean  @default(true)
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── CATEGORIES & THREADS ────────────────────────────────────────────────────
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  description String?
+  icon        String?
+  color       String?
+  parentId    String?
+  parent      Category?  @relation("Subcategory", fields: [parentId], references: [id])
+  children    Category[] @relation("Subcategory")
+  threads     Thread[]
+  sortOrder   Int        @default(0)
+  isPrivate   Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+}
+
+model Thread {
+  id             String   @id @default(cuid())
+  title          String
+  slug           String   @unique
+  categoryId     String
+  authorId       String
+  isPinned       Boolean  @default(false)
+  isLocked       Boolean  @default(false)
+  isSolved       Boolean  @default(false)
+  isDeleted      Boolean  @default(false)
+  viewCount      Int      @default(0)
+  replyCount     Int      @default(0)
+  lastPostAt     DateTime @default(now())
+  lastPostUserId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  category      Category           @relation(fields: [categoryId], references: [id])
+  author        User               @relation(fields: [authorId], references: [id])
+  posts         Post[]
+  tags          ThreadTag[]
+  poll          Poll?
+  subscriptions ThreadSubscription[]
+
+  @@index([categoryId, lastPostAt])
+  @@index([authorId])
+}
+
+model Post {
+  id          String    @id @default(cuid())
+  threadId    String
+  authorId    String
+  content     String    @db.Text
+  isFirstPost Boolean   @default(false)
+  isDeleted   Boolean   @default(false)
+  isSolution  Boolean   @default(false)
+  editedAt    DateTime?
+  editedById  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  thread      Thread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author      User        @relation(fields: [authorId], references: [id])
+  reactions   Reaction[]
+  attachments Attachment[]
+  reports     Report[]
+
+  @@index([threadId, createdAt])
+}
+
+// ─── TAGS ─────────────────────────────────────────────────────────────────────
+
+model Tag {
+  id      String      @id @default(cuid())
+  name    String      @unique
+  slug    String      @unique
+  color   String?
+  threads ThreadTag[]
+}
+
+model ThreadTag {
+  threadId String
+  tagId    String
+  thread   Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id])
+
+  @@id([threadId, tagId])
+}
+
+// ─── REACTIONS ────────────────────────────────────────────────────────────────
+
+model Reaction {
+  id        String       @id @default(cuid())
+  postId    String
+  userId    String
+  type      ReactionType
+  createdAt DateTime     @default(now())
+
+  post      Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId, type])
+}
+
+// ─── POLLS ────────────────────────────────────────────────────────────────────
+
+model Poll {
+  id        String       @id @default(cuid())
+  threadId  String       @unique
+  question  String
+  endsAt    DateTime?
+  createdAt DateTime     @default(now())
+
+  thread    Thread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  options   PollOption[]
+}
+
+model PollOption {
+  id        String     @id @default(cuid())
+  pollId    String
+  text      String
+  voteCount Int        @default(0)
+
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes     PollVote[]
+}
+
+model PollVote {
+  id           String     @id @default(cuid())
+  pollOptionId String
+  userId       String
+  createdAt    DateTime   @default(now())
+
+  option       PollOption @relation(fields: [pollOptionId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id])
+
+  @@unique([pollOptionId, userId])
+}
+
+// ─── PROVIDER REVIEWS ─────────────────────────────────────────────────────────
+
+model Review {
+  id                String   @id @default(cuid())
+  authorId          String
+  providerName      String
+  overallRating     Float
+  reliabilityRating Float
+  contentRating     Float
+  priceRating       Float
+  supportRating     Float
+  title             String
+  body              String   @db.Text
+  isVerified        Boolean  @default(false)
+  helpfulCount      Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  author            User     @relation(fields: [authorId], references: [id])
+
+  @@index([providerName])
+}
+
+// ─── M3U PLAYLISTS ────────────────────────────────────────────────────────────
+
+model Playlist {
+  id            String         @id @default(cuid())
+  authorId      String
+  title         String
+  description   String?
+  m3uUrl        String?
+  m3uFilePath   String?
+  channelCount  Int?
+  status        PlaylistStatus @default(PENDING)
+  validatedAt   DateTime?
+  isPublic      Boolean        @default(true)
+  downloadCount Int            @default(0)
+  tags          String[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  author        User           @relation(fields: [authorId], references: [id])
+  attachments   Attachment[]
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String?
+  isRead    Boolean          @default(false)
+  actionUrl String?
+  actorId   String?
+  createdAt DateTime         @default(now())
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+}
+
+// ─── PRIVATE MESSAGES ─────────────────────────────────────────────────────────
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String   @db.Text
+  isRead     Boolean  @default(false)
+  isDeleted  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  @@index([senderId, receiverId, createdAt])
+}
+
+// ─── REPORTS & MODERATION ─────────────────────────────────────────────────────
+
+model Report {
+  id             String       @id @default(cuid())
+  reportedById   String
+  reportedUserId String?
+  postId         String?
+  reason         String
+  description    String?
+  status         ReportStatus @default(PENDING)
+  resolvedAt     DateTime?
+  resolvedById   String?
+  createdAt      DateTime     @default(now())
+
+  reportedBy   User  @relation("ReportedBy", fields: [reportedById], references: [id])
+  reportedUser User? @relation("ReportedUser", fields: [reportedUserId], references: [id])
+  post         Post? @relation(fields: [postId], references: [id])
+}
+
+model Warning {
+  id         String    @id @default(cuid())
+  userId     String
+  issuedById String
+  reason     String
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation("WarnedUser", fields: [userId], references: [id])
+  issuedBy   User      @relation("IssuedByMod", fields: [issuedById], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  targetType String
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor      User     @relation(fields: [actorId], references: [id])
+
+  @@index([actorId, createdAt])
+}
+
+// ─── BADGES ───────────────────────────────────────────────────────────────────
+
+model Badge {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String
+  icon        String
+  color       String
+  requirement String
+  users       UserBadge[]
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  badgeId   String
+  awardedAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  badge     Badge    @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+}
+
+// ─── ATTACHMENTS ──────────────────────────────────────────────────────────────
+
+model Attachment {
+  id         String    @id @default(cuid())
+  fileName   String
+  filePath   String
+  fileSize   Int
+  mimeType   String
+  postId     String?
+  playlistId String?
+  createdAt  DateTime  @default(now())
+
+  post       Post?     @relation(fields: [postId], references: [id])
+  playlist   Playlist? @relation(fields: [playlistId], references: [id])
+}
+
+// ─── SUBSCRIPTIONS ────────────────────────────────────────────────────────────
+
+model ThreadSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  threadId  String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, threadId])
+}
+
+// ─── SITE SETTINGS ────────────────────────────────────────────────────────────
+
+model SiteSetting {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}
