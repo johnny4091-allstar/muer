@@ -243,6 +243,73 @@ def add_recent():
 
 # ── Podcasts ──────────────────────────────────────────────────────
 
+# ── On-Demand Music ───────────────────────────────────────────────
+
+MUSIC_GENRES = [
+    ("Pop",        "pop hits"),
+    ("Hip-Hop",    "hip hop rap"),
+    ("Rock",       "rock"),
+    ("R&B / Soul", "r&b soul"),
+    ("Electronic", "electronic dance"),
+    ("Country",    "country"),
+    ("Jazz",       "jazz"),
+    ("Classical",  "classical"),
+    ("Indie",      "indie alternative"),
+    ("K-Pop",      "k-pop"),
+    ("Latin",      "latin"),
+    ("Reggae",     "reggae"),
+]
+
+
+def _itunes_tracks(term: str, limit: int = 25) -> list:
+    key = f"track:{term}:{limit}"
+    if key in _cache:
+        ts, data = _cache[key]
+        if time.time() - ts < 300:
+            return data
+    try:
+        url = (f"https://itunes.apple.com/search"
+               f"?term={requests.utils.quote(term)}&entity=song&limit={limit}&media=music")
+        r = requests.get(url, timeout=10, headers=API_HEADERS)
+        results = [t for t in r.json().get("results", []) if t.get("previewUrl")]
+        _cache[key] = (time.time(), results)
+        return results
+    except Exception:
+        return []
+
+
+@app.route("/api/music/genres")
+def music_genres():
+    return jsonify([{"name": n, "term": t} for n, t in MUSIC_GENRES])
+
+
+@app.route("/api/music/featured")
+def music_featured():
+    """Mix of the first 5 genres for a diverse homepage grid."""
+    results, seen = [], set()
+    for _, term in MUSIC_GENRES[:6]:
+        for t in _itunes_tracks(term, 8):
+            tid = t.get("trackId")
+            if tid and tid not in seen:
+                seen.add(tid)
+                results.append(t)
+    return jsonify(results[:30])
+
+
+@app.route("/api/music/charts")
+def music_charts():
+    genre = request.args.get("genre", "pop hits").strip()
+    return jsonify(_itunes_tracks(genre, 30))
+
+
+@app.route("/api/music/search")
+def music_search_route():
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify([])
+    return jsonify(_itunes_tracks(q, 30))
+
+
 PODCAST_CATEGORIES = [
     ("True Crime",  "true crime podcast"),
     ("Comedy",      "comedy podcast"),

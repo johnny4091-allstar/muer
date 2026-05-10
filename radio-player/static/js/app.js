@@ -147,9 +147,15 @@ function makeQuickCard(item, type = 'radio') {
 const registry = new Map(); // id → {station, type}
 
 function register(st, type) {
-  const id = type === 'radio' ? st.stationuuid : String(st.collectionId);
+  const id = type === 'radio' ? st.stationuuid : String(st.collectionId || st.trackId);
   st._id = id;
   registry.set(id, { station: st, type });
+}
+
+function registerTrack(track) {
+  const id = String(track.trackId);
+  track._id = id;
+  registry.set(id, { station: track, type: 'track' });
 }
 
 function lookup(id) { return registry.get(id) || null; }
@@ -158,22 +164,128 @@ function lookup(id) { return registry.get(id) || null; }
 function playById(id, type) {
   const entry = lookup(id);
   if (!entry) return;
-  if (type === 'podcast') {
-    openPodcastDetail(entry.station);
-  } else {
-    playStation(entry.station);
-  }
+  if (type === 'podcast') openPodcastDetail(entry.station);
+  else if (type === 'track') playTrack(entry.station);
+  else playStation(entry.station);
 }
 
 function handleCardClick(e, id, type) {
   if (e.target.closest('.card-play-btn') || e.target.closest('.card-fav')) return;
-  // On coarse (touch) single click = play; on fine (mouse) single click opens detail
   if (window.matchMedia('(pointer: coarse)').matches) {
     playById(id, type);
   } else if (type === 'podcast') {
     openPodcastDetail(lookup(id)?.station);
+  } else if (type === 'track') {
+    playTrack(lookup(id)?.station);
   }
 }
+
+// ── Track card ────────────────────────────────────────────────────
+function makeTrackCard(track) {
+  const id      = String(track.trackId);
+  const isPlay  = S.currentStation?._id === id && S.isPlaying;
+  const name    = track.trackName   || 'Unknown';
+  const artist  = track.artistName  || '';
+  const img     = (track.artworkUrl100 || '').replace('100x100bb', '600x600bb');
+  const hasPreview = !!track.previewUrl;
+
+  return `<div class="card track-card${isPlay?' playing':''}" data-id="${esc(id)}" data-type="track"
+      ondblclick="playTrackById('${esc(id)}')"
+      onclick="handleCardClick(event,'${esc(id)}','track')">
+    <div class="card-img-wrap">
+      <div class="card-img">
+        ${img ? `<img src="${esc(img)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='🎵'">` : '🎵'}
+        ${!hasPreview ? '<div class="no-preview-badge">No preview</div>' : ''}
+      </div>
+      ${hasPreview ? `<button class="card-play-btn" onclick="event.stopPropagation();playTrackById('${esc(id)}')">${isPlay?'⏸':'▶'}</button>` : ''}
+      ${hasPreview ? '<span class="preview-badge">30s</span>' : ''}
+    </div>
+    <div class="card-name">${esc(name)}${isPlay?'<span class="playing-bars"><span></span><span></span><span></span></span>':''}</div>
+    <div class="card-artist">${esc(artist)}</div>
+  </div>`;
+}
+
+// ── Play track ────────────────────────────────────────────────────
+function playTrack(track) {
+  if (!track) return;
+  const url = track.previewUrl;
+  if (!url) { toast('No preview available for this track'); return; }
+  S.currentStation = {
+    _id:          String(track.trackId),
+    name:         track.trackName    || 'Unknown Track',
+    favicon:      (track.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+    country:      track.artistName   || '',
+    tags:         track.primaryGenreName || 'Music',
+    url_resolved: url,
+    stationuuid:  String(track.trackId),
+  };
+  S.currentType = 'music';
+  audio.src = url;
+  audio.load();
+  audio.play().catch(() => toast('Tap Play to start'));
+  updateNPBar();
+  refreshCards();
+  document.title = track.trackName + ' — Radio Player';
+  setHeroGradient(S.currentStation.favicon);
+}
+
+function playTrackById(id) {
+  const entry = lookup(id);
+  if (entry) playTrack(entry.station);
+}
+
+// ── Music section (homepage + view) ──────────────────────────────
+let _musicGenres = [];
+let _musicViewTracks = [];
+
+async function loadMusicGenres() {
+  _musicGenres = await apiFetch('/api/music/genres');
+  // Homepage chips
+  $('music-home-chips').innerHTML =
+    '<span class="chip active" onclick="loadMusicHome(null,this)">Featured</span>' +
+    _musicGenres.map(g => `<span class="chip" onclick="loadMusicHome('${esc(g.term)}',this)">${esc(g.name)}</span>`).join('');
+  // Music view chips
+  $('music-view-chips').innerHTML =
+    _musicGenres.map(g => `<span class="chip" onclick="selectMusicGenre('${esc(g.term)}',this)">${esc(g.name)}</span>`).join('');
+}
+
+async function loadMusicHome(term, chipEl) {
+  // Update chip active state
+  $('music-home-chips').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  if (chipEl) chipEl.classList.add('active');
+
+  $('music-home-grid').innerHTML = '<div class="empty-state" style="min-height:80px"><span class="spinner"></span></div>';
+  const url = term ? `/api/music/charts?genre=${encodeURIComponent(term)}` : '/api/music/featured';
+  const tracks = await apiFetch(url);
+  tracks.forEach(registerTrack);
+  $('music-home-grid').innerHTML = tracks.length
+    ? tracks.map(makeTrackCard).join('')
+    : '<div class="empty-state"><div class="icon">🎵</div><p>No tracks found</p></div>';
+}
+
+async function selectMusicGenre(term, chipEl) {
+  $('music-view-chips').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  if (chipEl) chipEl.classList.add('active');
+  $('music-view-grid').innerHTML = '<div class="empty-state" style="min-height:100px"><span class="spinner"></span></div>';
+  const tracks = await apiFetch(`/api/music/charts?genre=${encodeURIComponent(term)}`);
+  _musicViewTracks = tracks;
+  tracks.forEach(registerTrack);
+  renderMusicView();
+}
+
+function renderMusicView() {
+  let tracks = [..._musicViewTracks];
+  const sort = $('music-sort')?.value || 'default';
+  if (sort === 'name')     tracks.sort((a,b) => (a.trackName||'').localeCompare(b.trackName||''));
+  if (sort === 'artist')   tracks.sort((a,b) => (a.artistName||'').localeCompare(b.artistName||''));
+  if (sort === 'duration') tracks.sort((a,b) => (b.trackTimeMillis||0) - (a.trackTimeMillis||0));
+  $('music-count').textContent = tracks.length + ' tracks';
+  $('music-view-grid').innerHTML = tracks.length
+    ? tracks.map(makeTrackCard).join('')
+    : '<div class="empty-state"><div class="icon">🎵</div><p>Select a genre above</p></div>';
+}
+
+function musicSort(val) { renderMusicView(); }
 
 // ── Play radio station ────────────────────────────────────────────
 function playStation(st) {
@@ -487,7 +599,7 @@ function clearRecent() {
 }
 
 // ── Views / Navigation ────────────────────────────────────────────
-const VIEWS = ['home','all','search','podcasts','library','recent'];
+const VIEWS = ['home','all','search','music','podcasts','library','recent'];
 function showView(name) {
   VIEWS.forEach(v => $(`view-${v}`).style.display = v === name ? '' : 'none');
   S.currentView = name;
@@ -504,6 +616,10 @@ const Nav = {
   home() {
     showView('home'); setNavActive('nav-home');
     $('search-input').value = '';
+  },
+  music() {
+    showView('music'); setNavActive('nav-music');
+    if (!_musicGenres.length) loadMusicGenres();
   },
   search() { $('search-input').focus(); setNavActive('nav-search'); },
   podcasts() {
@@ -554,36 +670,47 @@ async function loadHome() {
   top.forEach(s => register(s, 'radio'));
   trending.forEach(s => register(s, 'radio'));
 
-  $('quick-grid').innerHTML   = top.slice(0,6).map(s => makeQuickCard(s)).join('');
+  $('quick-grid').innerHTML    = top.slice(0,6).map(s => makeQuickCard(s)).join('');
   $('featured-grid').innerHTML = top.slice(0,20).map(s => makeCard(s)).join('');
-  $('trending-grid').innerHTML  = trending.slice(0,10).map(s => makeCard(s)).join('');
+  $('trending-grid').innerHTML = trending.slice(0,10).map(s => makeCard(s)).join('');
+
+  // Load music section (non-blocking, runs in parallel after station load)
+  loadMusicGenres();
+  loadMusicHome(null, $('music-home-chips')?.querySelector('.chip'));
 }
 
 // ── Search ────────────────────────────────────────────────────────
 async function doSearch(q) {
   showView('search'); setNavActive('nav-search');
   $('search-title').textContent = `Results for "${q}"`;
-  const data = await apiFetch('/api/search?q=' + encodeURIComponent(q));
+
+  // Fetch stations, podcasts, and tracks in parallel
+  const [data, tracksData] = await Promise.all([
+    apiFetch('/api/search?q=' + encodeURIComponent(q)),
+    apiFetch('/api/music/search?q=' + encodeURIComponent(q)),
+  ]);
   let pods = [];
   try {
-    const pr = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=podcast&limit=8&media=podcast`);
-    const pd = await pr.json();
-    pods = pd.results || [];
+    const pr = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=podcast&limit=6&media=podcast`);
+    pods = (await pr.json()).results || [];
   } catch(e) {}
 
   data.forEach(s => register(s, 'radio'));
   pods.forEach(p => { p._id = String(p.collectionId); register(p, 'podcast'); });
+  tracksData.forEach(registerTrack);
 
-  // Store station results for filter bar; podcast results rendered separately
   S.currentListStations = data;
   S.currentListGrid = 'search-grid';
 
-  const podsHtml = pods.length
-    ? '<div class="section-header" style="margin-top:20px"><span class="section-label">PODCASTS</span></div>' + pods.map(p => makeCard(p,'podcast')).join('')
+  const tracksHtml = tracksData.length
+    ? `<div class="section-header" style="margin-top:20px"><span class="section-label">🎵 MUSIC (${tracksData.length})</span></div>` + tracksData.slice(0,12).map(makeTrackCard).join('')
     : '';
-  // renderFilteredList will write to search-grid; append podcasts after
-  renderFilteredList(podsHtml);
-  $('search-count').textContent = (data.length + pods.length) + ' results';
+  const podsHtml = pods.length
+    ? `<div class="section-header" style="margin-top:20px"><span class="section-label">🎙 PODCASTS (${pods.length})</span></div>` + pods.map(p => makeCard(p,'podcast')).join('')
+    : '';
+
+  renderFilteredList(tracksHtml + podsHtml);
+  $('search-count').textContent = (data.length + tracksData.length + pods.length) + ' results';
 }
 
 // ── Library ───────────────────────────────────────────────────────

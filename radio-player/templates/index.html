@@ -25,6 +25,7 @@
       <span class="app-logo-text">Radio Player</span>
     </div>
     <button class="nav-btn active" id="nav-home"     onclick="Nav.home()"><span class="nav-icon">🏠</span>Home</button>
+    <button class="nav-btn"        id="nav-music"    onclick="Nav.music()"><span class="nav-icon">🎵</span>Music</button>
     <button class="nav-btn"        id="nav-search"   onclick="Nav.search()"><span class="nav-icon">🔍</span>Search</button>
     <button class="nav-btn"        id="nav-podcasts" onclick="Nav.podcasts()"><span class="nav-icon">🎙</span>Podcasts</button>
     <button class="nav-btn"        id="nav-library"  onclick="Nav.library()"><span class="nav-icon">💚</span>Your Library</button>
@@ -97,6 +98,24 @@
 
     <!-- HOME -->
     <div id="view-home">
+
+      <!-- ── ON-DEMAND MUSIC (top of home) ── -->
+      <div class="music-hero-section">
+        <div class="music-hero-header">
+          <div>
+            <div class="music-hero-label">On-Demand Music</div>
+            <div class="music-hero-sub">30-second previews · millions of tracks</div>
+          </div>
+          <span class="see-all" onclick="Nav.music()">Browse All →</span>
+        </div>
+        <div class="chip-row" id="music-home-chips">
+          <span class="chip active" onclick="loadMusicHome(null,this)">Featured</span>
+        </div>
+        <div class="card-grid" id="music-home-grid">
+          <div class="empty-state" style="min-height:100px"><span class="spinner"></span></div>
+        </div>
+      </div>
+
       <div class="section">
         <div class="section-header">
           <h1 class="section-title" id="greeting">Good evening</h1>
@@ -145,6 +164,32 @@
           <span id="search-count" style="font-size:12px;color:var(--text-3)"></span>
         </div>
         <div class="card-grid" id="search-grid"></div>
+      </div>
+    </div>
+
+    <!-- MUSIC -->
+    <div id="view-music" style="display:none">
+      <div class="section">
+        <div class="section-header">
+          <span class="section-sub">🎵 On-Demand Music</span>
+          <span style="font-size:11px;color:var(--text-3)">30-sec previews</span>
+        </div>
+        <div class="chip-row" id="music-view-chips"></div>
+        <div class="music-filter-row">
+          <div class="filter-group">
+            <span class="filter-label">Sort</span>
+            <select class="filter-select" id="music-sort" onchange="musicSort(this.value)">
+              <option value="default">Default</option>
+              <option value="name">Title A–Z</option>
+              <option value="artist">Artist A–Z</option>
+              <option value="duration">Duration</option>
+            </select>
+          </div>
+          <span class="filter-count" id="music-count"></span>
+        </div>
+        <div class="card-grid" id="music-view-grid">
+          <div class="empty-state"><div class="icon">🎵</div><p>Select a genre above</p></div>
+        </div>
       </div>
     </div>
 

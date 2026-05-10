@@ -679,3 +679,63 @@ html, body {
 
 /* User button in topbar — shows username when signed in */
 #user-btn.signed-in { color: var(--green); font-weight: 700; font-size: 13px; padding: 5px 10px; border-radius: 500px; border: 1px solid var(--green); }
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  MUSIC HERO SECTION (top of home)                               */
+/* ═══════════════════════════════════════════════════════════════ */
+.music-hero-section {
+  background: linear-gradient(135deg, #1a0a2e 0%, #0d1a3a 50%, #0a2a1a 100%);
+  border-radius: 12px; padding: 20px; margin-bottom: 24px;
+  position: relative; overflow: hidden;
+}
+.music-hero-section::before {
+  content: '🎵'; position: absolute; right: 16px; top: 10px;
+  font-size: 80px; opacity: 0.08; pointer-events: none;
+}
+.music-hero-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.music-hero-label {
+  font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -0.3px;
+}
+.music-hero-sub {
+  font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 3px;
+}
+.music-hero-section .chip-row { margin-bottom: 16px; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; }
+.music-hero-section .chip-row::-webkit-scrollbar { display: none; }
+.music-hero-section .chip { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.7); }
+.music-hero-section .chip:hover { background: rgba(255,255,255,0.2); color: #fff; }
+.music-hero-section .chip.active { background: var(--green); border-color: var(--green); color: #000; }
+.music-hero-section .card-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.music-hero-section .card { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.08); }
+.music-hero-section .card:hover { background: rgba(255,255,255,0.13); }
+.music-hero-section .see-all { color: var(--green); font-size: 12px; font-weight: 700; margin-top: 4px; }
+
+/* ── Track cards ─────────────────────────────────────────────── */
+.track-card .card-img { border-radius: 4px; } /* square, no round */
+.preview-badge {
+  position: absolute; bottom: 6px; left: 6px;
+  background: rgba(0,0,0,0.7); color: var(--green);
+  font-size: 9px; font-weight: 800; padding: 2px 5px;
+  border-radius: 3px; letter-spacing: 0.5px;
+  pointer-events: none;
+}
+.card-artist { font-size: 11px; color: var(--text-3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.no-preview-badge {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 6px; font-size: 11px; color: rgba(255,255,255,0.5);
+}
+
+/* ── Music view filter row ───────────────────────────────────── */
+.music-filter-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 14px; flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .music-hero-section { border-radius: 0; margin: 0 -14px 20px; padding: 16px 14px; }
+  .music-hero-section .card-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+  .music-hero-label { font-size: 17px; }
+}
