@@ -530,8 +530,11 @@ html, body {
   :root { --player-h: 72px; }
   #app {
     grid-template-columns: 1fr;
-    grid-template-areas: "main" "player";
+    grid-template-areas: "main";
+    grid-template-rows: 1fr;
     padding: 0; gap: 0;
+    /* leave room for fixed player bar + browser chrome */
+    padding-bottom: calc(var(--player-h) + env(safe-area-inset-bottom, 0px));
   }
   #sidebar { display: none; }
   #main { border-radius: 0; }
@@ -541,15 +544,18 @@ html, body {
   .card-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
   .quick-grid { grid-template-columns: 1fr; }
 
-  /* ── Mobile player bar: tall, touch-friendly ── */
+  /* ── Mobile player bar: fixed so browser chrome never covers it ── */
   #player-bar {
-    grid-template-columns: 58px 1fr auto;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    grid-area: unset;
+    grid-template-columns: 72px 1fr auto;
     grid-template-rows: 1fr;
     gap: 0;
-    padding: 0 12px 0 0;
-    height: var(--player-h);
-    position: relative;
-    cursor: pointer; /* tap to expand */
+    padding: 0 12px env(safe-area-inset-bottom, 0px) 0;
+    height: calc(var(--player-h) + env(safe-area-inset-bottom, 0px));
+    cursor: pointer;
+    z-index: 100;
   }
   #np-favicon { width: 72px; height: 72px; border-radius: 0; box-shadow: none; }
   #np-left { gap: 10px; padding-left: 10px; }
@@ -571,6 +577,8 @@ html, body {
 
 @media (max-width: 480px) {
   :root { --player-h: 68px; }
+  #app { padding-bottom: calc(var(--player-h) + env(safe-area-inset-bottom, 0px)); }
+  #player-bar { height: calc(var(--player-h) + env(safe-area-inset-bottom, 0px)); }
   #np-name { font-size: 14px; }
   #np-meta { font-size: 11px; }
   .fs-art { width: min(260px, 75vw); height: min(260px, 75vw); }
