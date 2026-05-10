@@ -40,27 +40,16 @@ let ytPlayer = null, ytAPIReady = false;
 // Called by YouTube IFrame API script when it finishes loading
 window.onYouTubeIframeAPIReady = () => { ytAPIReady = true; };
 
-const INVIDIOUS_HOSTS = [
-  'https://inv.nadeko.net',
-  'https://invidious.privacydev.net',
-  'https://yt.cdaut.de',
-  'https://invidious.fdn.fr',
-];
-
 async function getVideoId(name, artist) {
-  const q = encodeURIComponent(`${artist} ${name} audio`);
-  for (const host of INVIDIOUS_HOSTS) {
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 8000);
-      const r = await fetch(`${host}/api/v1/search?q=${q}&type=video&fields=videoId`, {signal: ctrl.signal});
-      clearTimeout(t);
-      if (r.ok) {
-        const data = await r.json();
-        if (Array.isArray(data) && data[0]?.videoId) return data[0].videoId;
-      }
-    } catch(e) { /* try next */ }
-  }
+  try {
+    const r = await fetch(
+      `/api/music/yt-search?name=${encodeURIComponent(name)}&artist=${encodeURIComponent(artist)}`
+    );
+    if (r.ok) {
+      const d = await r.json();
+      if (d.videoId) return d.videoId;
+    }
+  } catch(e) {}
   return null;
 }
 

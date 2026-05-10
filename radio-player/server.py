@@ -318,6 +318,55 @@ def music_search_route():
     return jsonify(_itunes_tracks(q, 30))
 
 
+@app.route("/api/music/yt-search")
+def music_yt_search():
+    """Return a YouTube video ID for a track — server-side to avoid browser CORS."""
+    name   = request.args.get("name",   "").strip()
+    artist = request.args.get("artist", "").strip()
+    q = f"{artist} {name} audio".strip()
+    if not q:
+        return jsonify({"error": "no query"}), 400
+
+    # Primary: Invidious instances (lightweight public YouTube API mirrors)
+    INVIDIOUS = [
+        "https://inv.nadeko.net",
+        "https://invidious.privacydev.net",
+        "https://yt.cdaut.de",
+        "https://invidious.fdn.fr",
+        "https://vid.puffyan.us",
+    ]
+    for host in INVIDIOUS:
+        try:
+            r = requests.get(
+                f"{host}/api/v1/search",
+                params={"q": q, "type": "video", "fields": "videoId"},
+                timeout=8,
+            )
+            if r.ok:
+                data = r.json()
+                if isinstance(data, list) and data and data[0].get("videoId"):
+                    return jsonify({"videoId": data[0]["videoId"]})
+        except Exception:
+            continue
+
+    # Fallback: yt-dlp CLI — just fetch the video ID (no stream URL needed)
+    bin_path = _ydlp_bin()
+    if bin_path:
+        try:
+            result = subprocess.run(
+                [bin_path, "--print", "id", "--no-playlist", f"ytsearch1:{q}"],
+                capture_output=True, text=True, timeout=30,
+            )
+            lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+            vid = lines[-1] if lines else ""
+            if vid and len(vid) == 11:
+                return jsonify({"videoId": vid})
+        except Exception:
+            pass
+
+    return jsonify({"error": "not found"}), 404
+
+
 def _ydlp_bin():
     """Return path to yt-dlp binary, checking common locations."""
     import shutil
