@@ -1,0 +1,24 @@
+[Unit]
+Description=Radio Player Web Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=radio-player
+Group=radio-player
+WorkingDirectory=/opt/radio-player
+ExecStart=/usr/bin/python3 /opt/radio-player/server.py
+Restart=on-failure
+RestartSec=5
+Environment=RADIO_PORT=5000
+Environment=RADIO_HOST=0.0.0.0
+
+# Hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/home/radio-player/.config/radio-player
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0d0d1a">
+  <title>Radio Player</title>
+  <link rel="icon" href="/static/img/radio_icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Top Bar ─────────────────────────────────────────────── -->
+  <header id="topbar">
+    <span id="app-title">📻 Radio Player</span>
+    <div id="search-wrap">
+      <span id="search-icon">🔍</span>
+      <input id="search-input" type="search" placeholder="Search stations…" autocomplete="off" spellcheck="false">
+    </div>
+    <span id="loading-indicator"></span>
+    <div style="flex:1"></div>
+    <!-- Status message (right side of topbar) -->
+    <span id="status-msg" style="font-size:11px;color:var(--text-sec);transition:opacity 0.4s;opacity:0;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;"></span>
+  </header>
+
+  <!-- ── Sidebar ──────────────────────────────────────────────── -->
+  <nav id="sidebar">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="browse">Browse</button>
+      <button class="tab-btn" data-tab="favorites">Favorites</button>
+    </div>
+
+    <!-- Browse tab -->
+    <div class="tab-panel active" id="tab-browse">
+      <div class="side-section-label">Countries</div>
+      <div class="side-list" id="country-list">
+        <div class="side-item" style="color:var(--text-mute)">Loading…</div>
+      </div>
+      <div class="side-section-label" style="margin-top:4px">Genres</div>
+      <div class="side-list" id="genre-list" style="max-height:220px">
+        <div class="side-item" style="color:var(--text-mute)">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Favorites tab -->
+    <div class="tab-panel" id="tab-favorites">
+      <div class="side-list" id="fav-list"></div>
+    </div>
+  </nav>
+
+  <!-- ── Main Station List ─────────────────────────────────────── -->
+  <main id="main">
+    <div id="section-header">
+      <span id="section-title">Top Stations</span>
+      <span id="station-count"></span>
+    </div>
+    <div id="station-list"></div>
+  </main>
+
+  <!-- ── Now Playing Bar ──────────────────────────────────────── -->
+  <footer id="player-bar">
+    <!-- Now playing info -->
+    <div id="np-favicon">📻</div>
+    <div id="np-info">
+      <div id="np-name">Not playing</div>
+      <div id="np-meta"></div>
+      <div id="np-stream-title"></div>
+    </div>
+
+    <!-- Playback controls -->
+    <div id="controls">
+      <button class="ctrl-btn" id="stop-btn" title="Stop (S)">⏹</button>
+      <button id="play-btn" title="Play / Pause (Space)">▶</button>
+    </div>
+
+    <!-- Volume -->
+    <div id="volume-wrap">
+      <span id="vol-icon" title="Click to mute">🔊</span>
+      <input id="vol-slider" type="range" min="0" max="100" value="80" title="Volume">
+      <span id="vol-label">80%</span>
+    </div>
+
+    <!-- Extra tools -->
+    <div id="extra-controls">
+      <span id="timer-display"></span>
+      <button class="tool-btn" id="timer-btn" title="Sleep Timer">⏰ Sleep</button>
+      <button class="tool-btn" id="eq-btn" title="Equalizer">EQ</button>
+    </div>
+  </footer>
+
+</div><!-- #app -->
+
+<!-- ── Equalizer Modal ─────────────────────────────────────────── -->
+<div class="modal-overlay" id="eq-modal">
+  <div class="modal">
+    <h3>🎚 Equalizer</h3>
+    <div id="eq-content"><!-- built by JS --></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="eq-reset">Reset</button>
+      <button class="btn btn-ghost" id="eq-close">Close</button>
+      <button class="btn btn-primary" id="eq-apply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Sleep Timer Modal ───────────────────────────────────────── -->
+<div class="modal-overlay" id="timer-modal">
+  <div class="modal">
+    <h3>⏰ Sleep Timer</h3>
+    <p style="color:var(--text-sec);font-size:12px;margin-bottom:14px">Stop playback automatically after:</p>
+    <div class="timer-options">
+      <button class="timer-pill" data-min="15">15 min</button>
+      <button class="timer-pill" data-min="30">30 min</button>
+      <button class="timer-pill" data-min="45">45 min</button>
+      <button class="timer-pill" data-min="60">1 hour</button>
+      <button class="timer-pill" data-min="90">90 min</button>
+      <button class="timer-pill" data-min="120">2 hours</button>
+    </div>
+    <div class="timer-custom">
+      <label style="color:var(--text-sec);font-size:12px">Custom:</label>
+      <input id="custom-timer-input" type="number" min="1" max="999" placeholder="min" value="30">
+      <span style="color:var(--text-sec);font-size:12px">minutes</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="timer-cancel">Cancel / Disable</button>
+      <button class="btn btn-primary" id="timer-set">Set Timer</button>
+      <button class="btn btn-secondary" id="timer-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
