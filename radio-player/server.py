@@ -321,28 +321,61 @@ def _ydlp_bin():
 
 
 def _resolve_stream(query):
-    """Return (cdn_url, ext) for the best audio of query, or (None, None)."""
+    """Return (cdn_url, ext) for the best audio of query, or (None, None).
+
+    Prefer m4a/AAC because webm/opus is not supported on iOS Safari or many
+    mobile browsers. Fall back through mp3 then any format as a last resort.
+    """
+    # m4a is universally supported (iOS, Android, desktop); webm/opus is not
+    FMT = "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio"
+
+    def _pick_entry(info):
+        if not info:
+            return None
+        if "entries" in info:
+            entries = [e for e in (info.get("entries") or []) if e]
+            return entries[0] if entries else None
+        return info
+
+    def _best_url(entry):
+        """Extract (url, ext) preferring m4a from the formats list."""
+        if not entry:
+            return None, None
+        # Top-level url is the selected format's URL
+        url = entry.get("url", "")
+        ext = (entry.get("ext") or "webm").lower()
+        if url and url.startswith("http"):
+            return url, ext
+        # Walk formats, prefer m4a/mp3 over webm
+        priority = {"m4a": 0, "mp4": 1, "mp3": 2}
+        best_url, best_ext, best_pri = "", "webm", 99
+        for fmt in entry.get("formats", []):
+            if fmt.get("acodec") in (None, "none"):
+                continue
+            furl = fmt.get("url", "")
+            if not furl.startswith("http"):
+                continue
+            fext = (fmt.get("ext") or "webm").lower()
+            pri = priority.get(fext, 10)
+            if pri < best_pri:
+                best_url, best_ext, best_pri = furl, fext, pri
+        return (best_url, best_ext) if best_url else (None, None)
+
     # ── Attempt 1: Python API ──────────────────────────────────────────
     try:
         import yt_dlp as ytdlp
         ydl_opts = {
-            "format": "bestaudio",
+            "format": FMT,
             "quiet": True,
             "no_warnings": True,
             "socket_timeout": 20,
         }
         with ytdlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f"ytsearch1:{query}", download=False)
-        if info:
-            entry = info
-            if "entries" in info:
-                entries = [e for e in (info.get("entries") or []) if e]
-                entry = entries[0] if entries else None
-            if entry:
-                url = entry.get("url", "")
-                ext = (entry.get("ext") or "webm").lower()
-                if url and url.startswith("http"):
-                    return url, ext
+        entry = _pick_entry(info)
+        url, ext = _best_url(entry)
+        if url:
+            return url, ext
     except Exception:
         pass  # fall through to CLI
 
@@ -351,22 +384,14 @@ def _resolve_stream(query):
     if bin_path:
         try:
             result = subprocess.run(
-                [bin_path, "-j", "--format", "bestaudio", "--no-playlist",
+                [bin_path, "-j", "--format", FMT, "--no-playlist",
                  f"ytsearch1:{query}"],
                 capture_output=True, text=True, timeout=60,
             )
             if result.returncode == 0 and result.stdout.strip():
                 info = json.loads(result.stdout.strip().splitlines()[-1])
-                # Try top-level url first, then pick best from formats list
-                url = info.get("url", "")
-                ext = (info.get("ext") or "webm").lower()
-                if not url or not url.startswith("http"):
-                    for fmt in reversed(info.get("formats", [])):
-                        if fmt.get("acodec") not in (None, "none") and fmt.get("url", "").startswith("http"):
-                            url = fmt["url"]
-                            ext = (fmt.get("ext") or "webm").lower()
-                            break
-                if url and url.startswith("http"):
+                url, ext = _best_url(info)
+                if url:
                     return url, ext
         except Exception:
             pass
