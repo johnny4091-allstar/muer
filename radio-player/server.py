@@ -313,7 +313,7 @@ def music_search_route():
 
 @app.route("/api/music/stream")
 def music_stream_route():
-    """Resolve track via yt-dlp then proxy the CDN audio with the correct MIME type."""
+    """Resolve track via yt-dlp Python API then proxy CDN audio with correct MIME type."""
     name   = request.args.get("name",   "").strip()
     artist = request.args.get("artist", "").strip()
     if not name:
@@ -321,38 +321,49 @@ def music_stream_route():
 
     query = f"{artist} {name}" if artist else name
 
-    # Step 1 — ask yt-dlp for the direct CDN URL + format extension (no download).
-    # Using --print avoids piping the binary stream and lets us set the correct MIME type.
     try:
-        result = subprocess.run(
-            [
-                "yt-dlp",
-                "-f", "bestaudio[ext=m4a]/bestaudio[acodec=mp4a]/bestaudio",
-                "--print", "%(url)s|||%(ext)s",
-                "--quiet", "--no-warnings",
-                f"ytsearch1:{query}",
-            ],
-            capture_output=True, text=True, timeout=30,
-        )
-    except FileNotFoundError:
+        import yt_dlp as ytdlp
+    except ImportError:
         return jsonify({"error": "yt-dlp not installed — run update.sh"}), 503
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "yt-dlp timed out searching for track"}), 504
 
-    output = result.stdout.strip()
-    if not output or "|||" not in output:
-        return jsonify({"error": "Track not found on YouTube"}), 404
+    # Extract info (no download) to get the real CDN URL and format
+    ydl_opts = {
+        "format": "bestaudio",
+        "quiet": True,
+        "no_warnings": True,
+        "socket_timeout": 20,
+    }
+    try:
+        with ytdlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    cdn_url, ext = output.split("|||", 1)
-    cdn_url = cdn_url.strip()
-    ext     = ext.strip().lower()
+    if not info:
+        return jsonify({"error": "No results found"}), 404
 
-    ct_map = {"m4a": "audio/mp4", "mp4": "audio/mp4",
-              "webm": "audio/webm", "mp3": "audio/mpeg",
-              "ogg": "audio/ogg",   "opus": "audio/ogg"}
+    # ytsearch wraps results in an "entries" list
+    entry = info
+    if "entries" in info:
+        entries = [e for e in (info["entries"] or []) if e]
+        if not entries:
+            return jsonify({"error": "No results found"}), 404
+        entry = entries[0]
+
+    cdn_url = entry.get("url", "")
+    ext     = (entry.get("ext") or "webm").lower()
+
+    if not cdn_url or not cdn_url.startswith("http"):
+        return jsonify({"error": "No audio URL resolved"}), 404
+
+    ct_map = {
+        "m4a": "audio/mp4",  "mp4": "audio/mp4",
+        "webm": "audio/webm", "mp3": "audio/mpeg",
+        "ogg": "audio/ogg",  "opus": "audio/ogg",
+    }
     content_type = ct_map.get(ext, "audio/webm")
 
-    # Step 2 — proxy the CDN URL through Flask so the browser avoids CORS.
+    # Proxy CDN → client so the browser never hits a CORS-blocked URL
     def generate():
         try:
             with requests.get(
@@ -363,7 +374,6 @@ def music_stream_route():
                         "AppleWebKit/537.36 (KHTML, like Gecko) "
                         "Chrome/124.0 Safari/537.36",
                     "Referer": "https://www.youtube.com/",
-                    "Origin":  "https://www.youtube.com",
                 },
             ) as r:
                 for chunk in r.iter_content(chunk_size=65536):
