@@ -25,8 +25,11 @@ fi
 
 # ── 2. Ubuntu version check ──────────────────────────────────────
 if ! command -v lsb_release &>/dev/null; then
-    error "lsb_release not found. Is this Ubuntu?"
-    exit 1
+    info "lsb_release not found — installing lsb-release…"
+    apt-get install -y -qq lsb-release 2>/dev/null || {
+        error "Could not install lsb-release. Is apt-get available?"
+        exit 1
+    }
 fi
 
 DISTRIB=$(lsb_release -is 2>/dev/null)
