@@ -35,6 +35,77 @@ audio.volume = S.volume / 100;
 audio.crossOrigin = 'anonymous';
 let audioCtx = null, analyser = null, sourceNode = null;
 
+// ── YouTube IFrame player (for on-demand music) ───────────────────
+let ytPlayer = null, ytAPIReady = false;
+// Called by YouTube IFrame API script when it finishes loading
+window.onYouTubeIframeAPIReady = () => { ytAPIReady = true; };
+
+const INVIDIOUS_HOSTS = [
+  'https://inv.nadeko.net',
+  'https://invidious.privacydev.net',
+  'https://yt.cdaut.de',
+  'https://invidious.fdn.fr',
+];
+
+async function getVideoId(name, artist) {
+  const q = encodeURIComponent(`${artist} ${name} audio`);
+  for (const host of INVIDIOUS_HOSTS) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      const r = await fetch(`${host}/api/v1/search?q=${q}&type=video&fields=videoId`, {signal: ctrl.signal});
+      clearTimeout(t);
+      if (r.ok) {
+        const data = await r.json();
+        if (Array.isArray(data) && data[0]?.videoId) return data[0].videoId;
+      }
+    } catch(e) { /* try next */ }
+  }
+  return null;
+}
+
+function initYTPlayer(videoId) {
+  if (!ytAPIReady || typeof YT === 'undefined') {
+    setTimeout(() => initYTPlayer(videoId), 200);
+    return;
+  }
+  if (ytPlayer) {
+    ytPlayer.loadVideoById(videoId);
+    ytPlayer.setVolume(S.volume);
+  } else {
+    ytPlayer = new YT.Player('yt-player-el', {
+      height: '1', width: '1', videoId,
+      playerVars: { autoplay: 1, controls: 0, playsinline: 1, rel: 0, iv_load_policy: 3 },
+      events: {
+        onReady:       e => { e.target.setVolume(S.volume); e.target.playVideo(); },
+        onStateChange: onYTStateChange,
+        onError:       onYTError,
+      },
+    });
+  }
+}
+
+function onYTStateChange(e) {
+  if (e.data === YT.PlayerState.PLAYING) {
+    S.isPlaying = true; updatePlayBtn();
+    $('np-stream-title').textContent = '';
+  } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
+    S.isPlaying = false; updatePlayBtn();
+  }
+}
+
+function onYTError(e) {
+  const prev = S.currentStation?._previewUrl;
+  if (prev) {
+    audio.src = prev; audio.load();
+    audio.play().catch(() => {});
+    toast('Playing 30s preview', 3000);
+  } else {
+    toast('Could not play this song', 3000);
+  }
+  S.isPlaying = false; updatePlayBtn();
+}
+
 function initAudioCtx() {
   if (audioCtx) return;
   try {
@@ -63,16 +134,8 @@ audio.addEventListener('ended',   () => { S.isPlaying = false; updatePlayBtn(); 
 audio.addEventListener('waiting', () => { $('play-btn').classList.add('loading'); });
 audio.addEventListener('canplay', () => { $('play-btn').classList.remove('loading'); });
 audio.addEventListener('error', () => {
-  // If full-song stream failed, try falling back to 30s iTunes preview
-  if (S.currentType === 'music' && S.currentStation?._previewUrl && audio.src !== S.currentStation._previewUrl) {
-    audio.src = S.currentStation._previewUrl;
-    audio.load();
-    audio.play().catch(() => toast('Tap Play to start'));
-    toast('Playing 30s preview (install yt-dlp for full songs)', 5000);
-    return;
-  }
   S.isPlaying = false; updatePlayBtn(); stopViz();
-  toast('Stream error — try another station');
+  if (S.currentType !== 'music') toast('Stream error — try another station');
 });
 
 // ── Utilities ─────────────────────────────────────────────────────
@@ -220,31 +283,47 @@ function makeTrackCard(track) {
 }
 
 // ── Play track ────────────────────────────────────────────────────
-function playTrack(track) {
+async function playTrack(track) {
   if (!track) return;
-  const streamUrl = `/api/music/stream?name=${encodeURIComponent(track.trackName||'')}&artist=${encodeURIComponent(track.artistName||'')}`;
   const art = (track.artworkUrl100 || '').replace('100x100bb', '600x600bb');
 
   S.currentStation = {
     _id:          String(track.trackId),
-    name:         track.trackName         || 'Unknown Track',
+    name:         track.trackName        || 'Unknown Track',
     favicon:      art,
-    country:      track.artistName        || '',
-    tags:         track.primaryGenreName  || 'Music',
-    url_resolved: streamUrl,
+    country:      track.artistName       || '',
+    tags:         track.primaryGenreName || 'Music',
+    url_resolved: '',
     stationuuid:  String(track.trackId),
-    _previewUrl:  track.previewUrl || '',  // fallback if yt-dlp unavailable
+    _previewUrl:  track.previewUrl || '',
   };
   S.currentType = 'music';
 
-  $('np-stream-title').textContent = '⏳ Finding song…';
-  audio.src = streamUrl;
-  audio.load();
-  audio.play().catch(() => toast('Tap Play to start'));
-  updateNPBar();
-  refreshCards();
+  // Stop any radio stream
+  audio.pause(); audio.src = '';
+
+  $('np-stream-title').textContent = '⏳ Searching…';
+  updateNPBar(); refreshCards();
   document.title = (track.trackName || 'Music') + ' — Radio Player';
   setHeroGradient(art);
+
+  const videoId = await getVideoId(track.trackName || '', track.artistName || '');
+
+  if (videoId) {
+    initYTPlayer(videoId);
+    S.isPlaying = true; updatePlayBtn();
+  } else {
+    // Fallback: iTunes 30s preview
+    $('np-stream-title').textContent = '';
+    if (track.previewUrl) {
+      audio.src = track.previewUrl; audio.load();
+      audio.play().catch(() => toast('Tap Play to start'));
+      toast('Playing 30s preview', 3000);
+    } else {
+      toast('Could not find this song', 3000);
+      S.isPlaying = false; updatePlayBtn();
+    }
+  }
 }
 
 function playTrackById(id) {
@@ -425,11 +504,17 @@ function refreshCards() {
 // ── Controls ──────────────────────────────────────────────────────
 function togglePlay() {
   if (!S.currentStation) return;
-  if (audio.paused) audio.play().catch(()=>{});
-  else              audio.pause();
+  if (S.currentType === 'music' && ytPlayer) {
+    if (S.isPlaying) ytPlayer.pauseVideo();
+    else             ytPlayer.playVideo();
+  } else {
+    if (audio.paused) audio.play().catch(() => {});
+    else              audio.pause();
+  }
 }
 
 function stopPlayback() {
+  if (ytPlayer) { try { ytPlayer.stopVideo(); } catch(e) {} }
   audio.pause(); audio.src = '';
   S.isPlaying = false; S.currentStation = null;
   updatePlayBtn();
@@ -449,6 +534,7 @@ function stopPlayback() {
 function setVolume(v) {
   S.volume = v; S.muted = v === 0;
   audio.volume = v / 100;
+  if (ytPlayer) { try { ytPlayer.setVolume(v); } catch(e) {} }
   $('vol-label').textContent = v + '%';
   $('vol-icon').textContent  = v===0?'🔇':v<40?'🔈':v<70?'🔉':'🔊';
   $('vol-slider').value       = v;
