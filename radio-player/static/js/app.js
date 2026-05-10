@@ -2,74 +2,47 @@
 
 // ── State ────────────────────────────────────────────────────────
 const state = {
-  stations: [],
   currentStation: null,
-  favorites: new Set(),     // stationuuids
-  favoritesData: {},        // uuid -> station object
   isPlaying: false,
   volume: 80,
+  favorites: new Set(),
+  favoritesData: {},
+  topStations: [],
   eqBands: [0,0,0,0,0,0,0,0,0,0],
   sleepTimer: null,
   sleepRemaining: 0,
   searchDebounce: null,
-  activeSection: 'top',
-  activeSideItem: null,
+  currentView: 'home',
 };
 
-// ── Audio ────────────────────────────────────────────────────────
+// ── Audio ─────────────────────────────────────────────────────────
 const audio = new Audio();
 audio.volume = state.volume / 100;
 audio.preload = 'none';
 
-// ICY metadata via fetch (best-effort)
-let metadataInterval = null;
-
-audio.addEventListener('playing', () => {
-  state.isPlaying = true;
-  updatePlayBtn();
-  updateNowPlayingBar();
-});
-audio.addEventListener('pause',  () => { state.isPlaying = false; updatePlayBtn(); });
-audio.addEventListener('ended',  () => { state.isPlaying = false; updatePlayBtn(); });
-audio.addEventListener('error',  () => {
+audio.addEventListener('playing', () => { state.isPlaying = true;  updatePlayBtn(); updateNPBar(); refreshCards(); });
+audio.addEventListener('pause',   () => { state.isPlaying = false; updatePlayBtn(); });
+audio.addEventListener('ended',   () => { state.isPlaying = false; updatePlayBtn(); });
+audio.addEventListener('waiting', () => { document.getElementById('play-btn').classList.add('loading'); });
+audio.addEventListener('canplay', () => { document.getElementById('play-btn').classList.remove('loading'); });
+audio.addEventListener('error',   () => {
   state.isPlaying = false;
   updatePlayBtn();
   showStatus('Stream error — try another station');
 });
-audio.addEventListener('waiting', () => {
-  document.getElementById('play-btn').classList.add('loading');
-});
-audio.addEventListener('canplay', () => {
-  document.getElementById('play-btn').classList.remove('loading');
-});
 
-// ── DOM refs ─────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-const stationList   = $('station-list');
-const sectionTitle  = $('section-title');
-const stationCount  = $('station-count');
-const loadingEl     = $('loading-indicator');
-const searchInput   = $('search-input');
-const npFavicon     = $('np-favicon');
-const npName        = $('np-name');
-const npMeta        = $('np-meta');
-const npStreamTitle = $('np-stream-title');
-const playBtn       = $('play-btn');
-const volSlider     = $('vol-slider');
-const volLabel      = $('vol-label');
-const timerDisplay  = $('timer-display');
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+const greeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+};
 
-// ── Init ─────────────────────────────────────────────────────────
-async function init() {
-  volSlider.value = state.volume;
-  volLabel.textContent = state.volume + '%';
-  await loadFavorites();
-  loadTop();
-  loadSidebarData();
-  bindEvents();
-}
-
-// ── API helpers ───────────────────────────────────────────────────
+// ── API ───────────────────────────────────────────────────────────
 async function apiFetch(url) {
   setLoading(true);
   try {
@@ -85,188 +58,172 @@ async function apiFetch(url) {
 }
 
 function setLoading(on) {
-  loadingEl.innerHTML = on
-    ? '<span class="spinner"></span> Loading…'
+  $('loading-indicator').innerHTML = on
+    ? '<span class="spinner"></span>'
     : '';
 }
 
-// ── Load stations ─────────────────────────────────────────────────
-async function loadTop() {
-  sectionTitle.textContent = 'Top Stations';
-  state.activeSection = 'top';
-  const data = await apiFetch('/api/top?limit=100');
-  renderStations(data);
+// ── Card builder ──────────────────────────────────────────────────
+function makeCard(st, size = 'normal') {
+  const uuid     = st.stationuuid;
+  const isPlay   = state.currentStation?.stationuuid === uuid;
+  const isFav    = state.favorites.has(uuid);
+  const name     = (st.name || 'Unknown').trim();
+  const country  = st.country || '';
+  const genre    = (st.tags || '').split(',')[0].trim();
+  const meta     = [country, genre].filter(Boolean).join(' · ');
+  const favicon  = st.favicon || '';
+  const bitrate  = st.bitrate ? st.bitrate + 'kbps' : '';
+  const codec    = st.codec || '';
+  const detail   = [codec, bitrate].filter(Boolean).join(' · ');
+
+  const playIcon = isPlay && state.isPlaying ? '⏸' : '▶';
+
+  return `
+  <div class="card${isPlay ? ' playing' : ''}" data-uuid="${esc(uuid)}" ondblclick="App.playByUuid('${esc(uuid)}')">
+    <button class="card-fav${isFav ? ' active' : ''}" data-uuid="${esc(uuid)}" title="${isFav ? 'Remove' : 'Save'}" onclick="event.stopPropagation(); App.toggleFav('${esc(uuid)}')">
+      ${isFav ? '♥' : '♡'}
+    </button>
+    <div class="card-img-wrap">
+      <div class="card-img" id="cimg-${esc(uuid)}">
+        ${favicon
+          ? `<img src="${esc(favicon)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='📻'">`
+          : '📻'}
+      </div>
+      <button class="card-play-btn" onclick="event.stopPropagation(); App.playByUuid('${esc(uuid)}')" title="Play">${playIcon}</button>
+    </div>
+    <div class="card-name" title="${esc(name)}">${esc(name)}${isPlay ? '<span class="playing-bars"><span></span><span></span><span></span></span>' : ''}</div>
+    <div class="card-meta">${esc(meta || detail || 'Radio Station')}</div>
+  </div>`;
 }
 
-async function loadSearch(q) {
-  sectionTitle.textContent = `Search: "${q}"`;
-  state.activeSection = 'search';
+function makeQuickCard(st) {
+  const uuid    = st.stationuuid;
+  const isPlay  = state.currentStation?.stationuuid === uuid;
+  const name    = (st.name || 'Unknown').trim();
+  const favicon = st.favicon || '';
+  const playIcon = isPlay && state.isPlaying ? '⏸' : '▶';
+
+  return `
+  <div class="quick-card${isPlay ? ' playing' : ''}" data-uuid="${esc(uuid)}" ondblclick="App.playByUuid('${esc(uuid)}')">
+    <div class="quick-img" id="qimg-${esc(uuid)}">
+      ${favicon
+        ? `<img src="${esc(favicon)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='📻'">`
+        : '📻'}
+    </div>
+    <span class="quick-name">${esc(name)}</span>
+    <button class="quick-play-btn" onclick="event.stopPropagation(); App.playByUuid('${esc(uuid)}')">${playIcon}</button>
+  </div>`;
+}
+
+// ── Station lookup ────────────────────────────────────────────────
+function findStation(uuid) {
+  return state.topStations.find(s => s.stationuuid === uuid)
+      || state.favoritesData[uuid]
+      || null;
+}
+
+// ── App namespace (called from HTML onclick) ──────────────────────
+const App = {
+  playByUuid(uuid) {
+    const st = findStation(uuid);
+    if (st) playStation(st);
+  },
+
+  toggleFav(uuid) {
+    const st = findStation(uuid);
+    if (st) toggleFavorite(st);
+  },
+
+  toggleCurrentFav() {
+    if (state.currentStation) toggleFavorite(state.currentStation);
+  },
+
+  goHome() {
+    showView('home');
+    setNavActive('nav-home');
+  },
+
+  focusSearch() {
+    $('search-input').focus();
+    setNavActive('nav-search');
+  },
+
+  showFavorites() {
+    showView('favs');
+    setNavActive('nav-favs');
+    renderFavGrid();
+  },
+
+  showAllTop() {
+    $('section-title').textContent = 'Top Stations';
+    $('station-count').textContent = state.topStations.length + ' stations';
+    $('station-grid').innerHTML = state.topStations.map(s => makeCard(s)).join('');
+    showView('all');
+    setNavActive('nav-home');
+  },
+};
+
+// ── Views ─────────────────────────────────────────────────────────
+function showView(name) {
+  ['home','all','search','favs'].forEach(v => {
+    $(`view-${v}`).style.display = v === name ? '' : 'none';
+  });
+  state.currentView = name;
+}
+
+function setNavActive(id) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  $(id)?.classList.add('active');
+}
+
+// ── Home view ─────────────────────────────────────────────────────
+async function loadHome() {
+  $('greeting').textContent = greeting();
+  const stations = await apiFetch('/api/top?limit=100');
+  state.topStations = stations;
+
+  // Quick picks: first 6
+  $('quick-grid').innerHTML = stations.slice(0, 6).map(makeQuickCard).join('');
+  // Featured grid: next 20
+  $('featured-grid').innerHTML = stations.slice(0, 20).map(makeCard).join('');
+}
+
+// ── Search ────────────────────────────────────────────────────────
+async function doSearch(q) {
+  showView('search');
+  setNavActive('nav-search');
+  $('search-title').textContent = `Results for "${q}"`;
   const data = await apiFetch('/api/search?q=' + encodeURIComponent(q));
-  renderStations(data);
-}
-
-async function loadCountry(country) {
-  sectionTitle.textContent = 'Country: ' + country;
-  state.activeSection = 'country:' + country;
-  const data = await apiFetch('/api/country/' + encodeURIComponent(country));
-  renderStations(data);
-}
-
-async function loadTag(tag) {
-  sectionTitle.textContent = 'Genre: ' + capitalize(tag);
-  state.activeSection = 'tag:' + tag;
-  const data = await apiFetch('/api/tag/' + encodeURIComponent(tag));
-  renderStations(data);
-}
-
-function loadFavoritesTab() {
-  sectionTitle.textContent = 'Favorites';
-  state.activeSection = 'favorites';
-  const data = Object.values(state.favoritesData);
-  renderStations(data);
-  stationCount.textContent = data.length + ' stations';
-}
-
-// ── Render stations ───────────────────────────────────────────────
-function renderStations(stations) {
-  state.stations = stations;
-  stationCount.textContent = stations.length + ' stations';
-
-  if (!stations.length) {
-    stationList.innerHTML = `
-      <div class="empty-state">
-        <div class="icon">📻</div>
-        <p>No stations found</p>
-      </div>`;
-    return;
-  }
-
-  stationList.innerHTML = stations.map((st, i) => {
-    const isPlaying = state.currentStation?.stationuuid === st.stationuuid;
-    const isFav = state.favorites.has(st.stationuuid);
-    const name = (st.name || 'Unknown').trim();
-    const country = st.country || '';
-    const tags = st.tags || '';
-    const genre = tags.split(',')[0].trim();
-    const metaParts = [country, genre].filter(Boolean);
-    const bitrate = st.bitrate ? st.bitrate + 'k' : '';
-    const favicon = st.favicon || '';
-
-    return `<div class="station-item${isPlaying ? ' playing' : ''}" data-idx="${i}" data-uuid="${st.stationuuid}">
-      <div class="station-favicon" id="fav-img-${st.stationuuid}">
-        ${favicon ? `<img src="${escHtml(favicon)}" alt="" loading="lazy" onerror="this.parentElement.textContent='📻'">` : '📻'}
-      </div>
-      <div class="station-info">
-        <div class="station-name">${escHtml(name)}</div>
-        <div class="station-meta">${escHtml(metaParts.join('  ·  '))}</div>
-      </div>
-      <div class="station-right">
-        ${isPlaying ? '<div class="playing-bars"><span></span><span></span><span></span></div>' : ''}
-        ${bitrate ? `<span class="bitrate-badge">${bitrate}</span>` : ''}
-        <button class="fav-star${isFav ? ' active' : ''}" data-uuid="${st.stationuuid}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">
-          ${isFav ? '★' : '☆'}
-        </button>
-      </div>
-    </div>`;
-  }).join('');
-
-  // Bind row clicks
-  stationList.querySelectorAll('.station-item').forEach(el => {
-    el.addEventListener('dblclick', () => {
-      const idx = +el.dataset.idx;
-      playStation(state.stations[idx]);
-    });
-    el.addEventListener('click', e => {
-      if (e.target.closest('.fav-star')) return;
-      // single click selects; dblclick plays (on desktop)
-      // on mobile single click plays
-      if (window.matchMedia('(pointer: coarse)').matches) {
-        const idx = +el.dataset.idx;
-        playStation(state.stations[idx]);
-      }
-    });
-  });
-
-  stationList.querySelectorAll('.fav-star').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      toggleFavorite(btn.dataset.uuid);
-    });
-  });
-}
-
-// ── Playback ──────────────────────────────────────────────────────
-function playStation(station) {
-  const url = station.url_resolved || station.url;
-  if (!url) { showStatus('No stream URL for this station'); return; }
-
-  state.currentStation = station;
-  state.isPlaying = false;
-
-  audio.src = url;
-  audio.load();
-  audio.play().catch(() => showStatus('Playback blocked — click Play to start'));
-
-  updateNowPlayingBar();
-  refreshStationHighlight();
-  document.title = station.name + ' — Radio Player';
-  clearInterval(metadataInterval);
-}
-
-function updateNowPlayingBar() {
-  if (!state.currentStation) return;
-  const st = state.currentStation;
-  npName.textContent = (st.name || 'Unknown').trim();
-  const country = st.country || '';
-  const tags = (st.tags || '').split(',')[0].trim();
-  npMeta.textContent = [country, tags].filter(Boolean).join('  ·  ');
-
-  // favicon
-  const fav = st.favicon;
-  if (fav) {
-    npFavicon.innerHTML = `<img src="${escHtml(fav)}" alt="" onerror="this.parentElement.textContent='📻'">`;
-  } else {
-    npFavicon.textContent = '📻';
-  }
-}
-
-function updatePlayBtn() {
-  playBtn.classList.remove('loading');
-  playBtn.textContent = state.isPlaying ? '⏸' : '▶';
-}
-
-function refreshStationHighlight() {
-  stationList.querySelectorAll('.station-item').forEach(el => {
-    const isPlaying = el.dataset.uuid === state.currentStation?.stationuuid;
-    el.classList.toggle('playing', isPlaying);
-    const right = el.querySelector('.station-right');
-    // update playing bars
-    const existing = right.querySelector('.playing-bars');
-    if (isPlaying && !existing) {
-      right.insertAdjacentHTML('afterbegin', '<div class="playing-bars"><span></span><span></span><span></span></div>');
-    } else if (!isPlaying && existing) {
-      existing.remove();
-    }
-  });
+  state.topStations = [...state.topStations, ...data]; // merge for lookup
+  $('search-count').textContent = data.length + ' stations';
+  $('search-grid').innerHTML = data.length
+    ? data.map(makeCard).join('')
+    : '<div class="empty-state"><div class="icon">🔍</div><p>No results</p><span>Try a different search</span></div>';
 }
 
 // ── Favorites ─────────────────────────────────────────────────────
 async function loadFavorites() {
   const data = await apiFetch('/api/favorites');
-  state.favorites = new Set(data.map(s => s.stationuuid));
+  state.favorites    = new Set(data.map(s => s.stationuuid));
   state.favoritesData = Object.fromEntries(data.map(s => [s.stationuuid, s]));
 }
 
-async function toggleFavorite(uuid) {
-  const station = state.stations.find(s => s.stationuuid === uuid)
-                || state.favoritesData[uuid];
-  if (!station) return;
+function renderFavGrid() {
+  const data = Object.values(state.favoritesData);
+  $('fav-count').textContent = data.length + ' saved';
+  $('fav-grid').innerHTML = data.length
+    ? data.map(makeCard).join('')
+    : '<div class="empty-state"><div class="icon">💚</div><p>No saved stations yet</p><span>Click ♡ on any station to save it</span></div>';
+}
 
+async function toggleFavorite(station) {
+  const uuid = station.stationuuid;
   if (state.favorites.has(uuid)) {
     await fetch('/api/favorites/' + uuid, { method: 'DELETE' });
     state.favorites.delete(uuid);
     delete state.favoritesData[uuid];
-    showStatus('Removed from favorites');
+    showStatus('Removed from library');
   } else {
     await fetch('/api/favorites', {
       method: 'POST',
@@ -275,55 +232,160 @@ async function toggleFavorite(uuid) {
     });
     state.favorites.add(uuid);
     state.favoritesData[uuid] = station;
-    showStatus('Added to favorites ★');
+    showStatus('Saved to Your Library ♥');
   }
-
-  // Update star button
-  document.querySelectorAll(`.fav-star[data-uuid="${uuid}"]`).forEach(btn => {
-    btn.classList.toggle('active', state.favorites.has(uuid));
-    btn.textContent = state.favorites.has(uuid) ? '★' : '☆';
-    btn.title = state.favorites.has(uuid) ? 'Remove from favorites' : 'Add to favorites';
-  });
-
-  if (state.activeSection === 'favorites') loadFavoritesTab();
+  refreshCards();
+  updateNPFavBtn();
+  if (state.currentView === 'favs') renderFavGrid();
 }
 
-// ── Sidebar ───────────────────────────────────────────────────────
+// ── Playback ──────────────────────────────────────────────────────
+function playStation(station) {
+  const url = station.url_resolved || station.url || '';
+  if (!url) { showStatus('No stream URL'); return; }
+  state.currentStation = station;
+  audio.src = url;
+  audio.load();
+  audio.play().catch(() => showStatus('Click Play to start'));
+  updateNPBar();
+  document.title = (station.name || 'Radio Player') + ' — Radio Player';
+  setHeroGradient(station);
+}
+
+function updateNPBar() {
+  if (!state.currentStation) return;
+  const st = state.currentStation;
+  const name    = (st.name || 'Unknown').trim();
+  const country = st.country || '';
+  const genre   = (st.tags || '').split(',')[0].trim();
+
+  $('np-name').textContent = name;
+  $('np-meta').textContent = [country, genre].filter(Boolean).join('  ·  ');
+
+  const favicon = st.favicon;
+  $('np-favicon').innerHTML = favicon
+    ? `<img src="${esc(favicon)}" alt="" onerror="this.parentElement.textContent='📻'">`
+    : '📻';
+
+  updateNPFavBtn();
+}
+
+function updateNPFavBtn() {
+  const btn = $('np-fav-btn');
+  const isFav = state.currentStation && state.favorites.has(state.currentStation.stationuuid);
+  btn.textContent = isFav ? '♥' : '♡';
+  btn.classList.toggle('active', !!isFav);
+}
+
+function updatePlayBtn() {
+  $('play-btn').classList.remove('loading');
+  $('play-btn').textContent = state.isPlaying ? '⏸' : '▶';
+}
+
+function refreshCards() {
+  const uuid = state.currentStation?.stationuuid;
+  // Update all card states without full re-render
+  document.querySelectorAll('.card').forEach(card => {
+    const isPlay = card.dataset.uuid === uuid;
+    card.classList.toggle('playing', isPlay);
+    const nameEl = card.querySelector('.card-name');
+    if (!nameEl) return;
+    // Remove old playing bars
+    nameEl.querySelectorAll('.playing-bars').forEach(e => e.remove());
+    if (isPlay && state.isPlaying) {
+      nameEl.insertAdjacentHTML('beforeend', '<span class="playing-bars"><span></span><span></span><span></span></span>');
+    }
+    const playBtn = card.querySelector('.card-play-btn');
+    if (playBtn) playBtn.textContent = (isPlay && state.isPlaying) ? '⏸' : '▶';
+    const favBtn = card.querySelector('.card-fav');
+    if (favBtn) {
+      const fav = state.favorites.has(card.dataset.uuid);
+      favBtn.classList.toggle('active', fav);
+      favBtn.textContent = fav ? '♥' : '♡';
+    }
+  });
+  document.querySelectorAll('.quick-card').forEach(card => {
+    const isPlay = card.dataset.uuid === uuid;
+    card.classList.toggle('playing', isPlay);
+    const btn = card.querySelector('.quick-play-btn');
+    if (btn) btn.textContent = (isPlay && state.isPlaying) ? '⏸' : '▶';
+  });
+}
+
+// ── Hero gradient tint ────────────────────────────────────────────
+function setHeroGradient(station) {
+  // Rotate through a few accent colours based on station name hash
+  const palettes = [
+    '#3a1020','#0d2e3a','#1a2e0d','#2a1a3a','#3a2a0d','#0d1a3a','#3a0d2a'
+  ];
+  let hash = 0;
+  for (const c of (station.name || '')) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
+  const colour = palettes[hash % palettes.length];
+  $('main').style.setProperty('--hero-colour', colour);
+  $('main').style.cssText += `--hero: ${colour}`;
+  const before = document.querySelector('#main::before');
+  $('main').style.background = `linear-gradient(180deg, ${colour}88 0%, var(--bg-base) 300px)`;
+  setTimeout(() => { $('main').style.background = ''; }, 3000);
+}
+
+// ── Sidebar data ──────────────────────────────────────────────────
 async function loadSidebarData() {
   const [countries, tags] = await Promise.all([
     apiFetch('/api/countries'),
     apiFetch('/api/tags'),
   ]);
 
-  const countryList = $('country-list');
-  countryList.innerHTML = countries.map(c =>
-    `<div class="side-item" data-country="${escHtml(c.name)}">${escHtml(c.name)} <span style="color:var(--text-mute);font-size:10px">(${c.stationcount})</span></div>`
-  ).join('');
-  countryList.querySelectorAll('.side-item').forEach(el => {
-    el.addEventListener('click', () => {
-      setSideActive(el);
-      loadCountry(el.dataset.country);
+  $('country-list').innerHTML = countries.map(c => `
+    <div class="sidebar-item" data-country="${esc(c.name)}">
+      <div class="sidebar-item-img">🌍</div>
+      <div class="sidebar-item-info">
+        <div class="sidebar-item-name">${esc(c.name)}</div>
+        <div class="sidebar-item-sub">${c.stationcount} stations</div>
+      </div>
+    </div>`).join('');
+
+  $('genre-list').innerHTML = tags.map(t => `
+    <div class="sidebar-item" data-tag="${esc(t.name)}">
+      <div class="sidebar-item-img">🎵</div>
+      <div class="sidebar-item-info">
+        <div class="sidebar-item-name">${esc(cap(t.name))}</div>
+        <div class="sidebar-item-sub">${t.stationcount} stations</div>
+      </div>
+    </div>`).join('');
+
+  $('country-list').querySelectorAll('.sidebar-item').forEach(el => {
+    el.addEventListener('click', async () => {
+      setSidebarActive(el);
+      const country = el.dataset.country;
+      $('section-title').textContent = '🌍 ' + country;
+      const data = await apiFetch('/api/country/' + encodeURIComponent(country));
+      state.topStations = [...state.topStations, ...data];
+      $('station-count').textContent = data.length + ' stations';
+      $('station-grid').innerHTML = data.map(makeCard).join('');
+      showView('all');
     });
   });
 
-  const genreList = $('genre-list');
-  genreList.innerHTML = tags.map(t =>
-    `<div class="side-item" data-tag="${escHtml(t.name)}">${escHtml(capitalize(t.name))} <span style="color:var(--text-mute);font-size:10px">(${t.stationcount})</span></div>`
-  ).join('');
-  genreList.querySelectorAll('.side-item').forEach(el => {
-    el.addEventListener('click', () => {
-      setSideActive(el);
-      loadTag(el.dataset.tag);
+  $('genre-list').querySelectorAll('.sidebar-item').forEach(el => {
+    el.addEventListener('click', async () => {
+      setSidebarActive(el);
+      const tag = el.dataset.tag;
+      $('section-title').textContent = '🎵 ' + cap(tag);
+      const data = await apiFetch('/api/tag/' + encodeURIComponent(tag));
+      state.topStations = [...state.topStations, ...data];
+      $('station-count').textContent = data.length + ' stations';
+      $('station-grid').innerHTML = data.map(makeCard).join('');
+      showView('all');
     });
   });
 }
 
-function setSideActive(el) {
-  document.querySelectorAll('.side-item').forEach(e => e.classList.remove('active'));
+function setSidebarActive(el) {
+  document.querySelectorAll('.sidebar-item').forEach(e => e.classList.remove('active'));
   el.classList.add('active');
 }
 
-// ── Equalizer ─────────────────────────────────────────────────────
+// ── EQ ────────────────────────────────────────────────────────────
 const EQ_PRESETS = {
   'Flat':         [0,0,0,0,0,0,0,0,0,0],
   'Bass Boost':   [8,6,4,2,0,0,0,0,0,0],
@@ -336,214 +398,172 @@ const EQ_PRESETS = {
 };
 const EQ_LABELS = ['32','64','125','250','500','1k','2k','4k','8k','16k'];
 
-function openEQ() {
-  const modal = $('eq-modal');
-  modal.classList.add('open');
+function openEQModal() {
+  buildEQ();
+  $('eq-modal').classList.add('open');
 }
 
-function buildEQModal() {
-  const bandsHtml = EQ_LABELS.map((label, i) => `
-    <div class="eq-band">
-      <div class="band-val" id="eq-val-${i}">${state.eqBands[i] > 0 ? '+' : ''}${state.eqBands[i]}</div>
-      <input type="range" id="eq-band-${i}" min="-12" max="12" step="1" value="${state.eqBands[i]}"
-             oninput="onEQSlider(${i}, this.value)">
-      <div class="band-label">${label}</div>
-    </div>`).join('');
-
-  const presetsHtml = Object.keys(EQ_PRESETS).map(name =>
-    `<button class="preset-btn" onclick="applyEQPreset('${name}')">${name}</button>`
+function buildEQ() {
+  const presetsHtml = Object.keys(EQ_PRESETS).map(n =>
+    `<button class="preset-btn${n==='Flat'?' active':''}" onclick="applyPreset('${n}')">${n}</button>`
   ).join('');
-
-  $('eq-content').innerHTML = `
-    <div class="eq-presets">${presetsHtml}</div>
-    <div class="eq-bands">${bandsHtml}</div>`;
+  const bandsHtml = EQ_LABELS.map((lbl, i) => `
+    <div class="eq-band">
+      <div class="band-val" id="ev${i}">${state.eqBands[i]>0?'+':''}${state.eqBands[i]}</div>
+      <input type="range" id="eb${i}" min="-12" max="12" step="1" value="${state.eqBands[i]}"
+             oninput="onBand(${i},this.value)">
+      <div class="band-label">${lbl}</div>
+    </div>`).join('');
+  $('eq-content').innerHTML = `<div class="eq-presets">${presetsHtml}</div><div class="eq-bands">${bandsHtml}</div>`;
 }
 
-function onEQSlider(i, val) {
-  state.eqBands[i] = +val;
-  const v = $(`eq-val-${i}`);
-  if (v) v.textContent = (+val > 0 ? '+' : '') + val;
-  // Web Audio EQ would go here; for now update display
+function onBand(i, v) {
+  state.eqBands[i] = +v;
+  $(`ev${i}`).textContent = (+v>0?'+':'')+v;
 }
 
-function applyEQPreset(name) {
-  const bands = EQ_PRESETS[name] || EQ_PRESETS['Flat'];
-  state.eqBands = [...bands];
-  bands.forEach((v, i) => {
-    const el = $(`eq-band-${i}`);
-    if (el) el.value = v;
-    const ve = $(`eq-val-${i}`);
-    if (ve) ve.textContent = (v > 0 ? '+' : '') + v;
+function applyPreset(name) {
+  const b = EQ_PRESETS[name] || EQ_PRESETS['Flat'];
+  state.eqBands = [...b];
+  b.forEach((v,i) => {
+    const el = $(`eb${i}`); if (el) el.value = v;
+    const ve = $(`ev${i}`); if (ve) ve.textContent = (v>0?'+':'')+v;
   });
-  document.querySelectorAll('.preset-btn').forEach(b =>
-    b.classList.toggle('active', b.textContent === name));
+  document.querySelectorAll('.preset-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.textContent === name));
 }
 
-// ── Sleep Timer ───────────────────────────────────────────────────
-function openSleepTimer() { $('timer-modal').classList.add('open'); }
+// ── Sleep timer ───────────────────────────────────────────────────
+function openTimerModal() { $('timer-modal').classList.add('open'); }
 
-function setSleepTimer(minutes) {
-  document.querySelectorAll('.timer-pill').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll(`.timer-pill[data-min="${minutes}"]`).forEach(b => b.classList.add('active'));
-  $('custom-timer-input').value = minutes;
-}
-
-function startSleepTimer() {
-  const minutes = +($('custom-timer-input').value) || 0;
-  clearSleepTimer();
-  if (!minutes) return;
-  state.sleepRemaining = minutes * 60;
+function startTimer() {
+  const m = +($('custom-timer-input').value) || 0;
+  clearTimer();
+  if (!m) return;
+  state.sleepRemaining = m * 60;
   state.sleepTimer = setInterval(() => {
     state.sleepRemaining--;
-    const m = Math.floor(state.sleepRemaining / 60);
-    const s = state.sleepRemaining % 60;
-    timerDisplay.textContent = `⏰ ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    const mm = Math.floor(state.sleepRemaining/60);
+    const ss = state.sleepRemaining % 60;
+    $('timer-display').textContent = `⏰ ${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
     $('timer-btn').classList.add('active');
     if (state.sleepRemaining <= 0) {
-      clearSleepTimer();
+      clearTimer();
       audio.pause();
       state.isPlaying = false;
       updatePlayBtn();
-      showStatus('Sleep timer: playback stopped');
+      showStatus('Sleep timer: stopped');
     }
   }, 1000);
-  closeSleepTimer();
-  showStatus(`Sleep timer set for ${minutes} minute${minutes > 1 ? 's' : ''}`);
+  $('timer-modal').classList.remove('open');
+  showStatus(`Sleep timer: ${m} min`);
 }
 
-function clearSleepTimer() {
-  if (state.sleepTimer) clearInterval(state.sleepTimer);
+function clearTimer() {
+  clearInterval(state.sleepTimer);
   state.sleepTimer = null;
   state.sleepRemaining = 0;
-  timerDisplay.textContent = '';
+  $('timer-display').textContent = '';
   $('timer-btn').classList.remove('active');
 }
 
-function closeSleepTimer() { $('timer-modal').classList.remove('open'); }
+// ── Volume ────────────────────────────────────────────────────────
+function updateVolume(v) {
+  state.volume = v;
+  audio.volume = v / 100;
+  $('vol-label').textContent = v + '%';
+  $('vol-icon').textContent = v === 0 ? '🔇' : v < 40 ? '🔈' : v < 70 ? '🔉' : '🔊';
+  $('vol-slider').style.setProperty('--vol-pct', v + '%');
+}
 
-// ── Status message ────────────────────────────────────────────────
-let statusTimeout;
+// ── Status ────────────────────────────────────────────────────────
+let _st;
 function showStatus(msg) {
   const el = $('status-msg');
-  el.textContent = msg;
-  el.style.opacity = '1';
-  clearTimeout(statusTimeout);
-  statusTimeout = setTimeout(() => { el.style.opacity = '0'; }, 4000);
-}
-
-// ── Utilities ─────────────────────────────────────────────────────
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-function capitalize(str) {
-  return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
+  el.textContent = msg; el.style.opacity = '1';
+  clearTimeout(_st);
+  _st = setTimeout(() => el.style.opacity = '0', 4000);
 }
 
 // ── Event bindings ────────────────────────────────────────────────
 function bindEvents() {
   // Search
-  searchInput.addEventListener('input', () => {
+  $('search-input').addEventListener('input', () => {
     clearTimeout(state.searchDebounce);
-    const q = searchInput.value.trim();
-    if (!q) { loadTop(); return; }
-    state.searchDebounce = setTimeout(() => loadSearch(q), 450);
+    const q = $('search-input').value.trim();
+    if (!q) { App.goHome(); return; }
+    state.searchDebounce = setTimeout(() => doSearch(q), 450);
   });
-  searchInput.addEventListener('keydown', e => {
+  $('search-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       clearTimeout(state.searchDebounce);
-      const q = searchInput.value.trim();
-      q ? loadSearch(q) : loadTop();
+      const q = $('search-input').value.trim();
+      if (q) doSearch(q); else App.goHome();
     }
   });
 
-  // Tabs (sidebar)
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      $(`tab-${btn.dataset.tab}`).classList.add('active');
-      if (btn.dataset.tab === 'favorites') loadFavoritesTab();
-    });
-  });
-
-  // Playback controls
-  playBtn.addEventListener('click', () => {
+  // Play/Stop
+  $('play-btn').addEventListener('click', () => {
     if (!state.currentStation) return;
-    if (audio.paused) {
-      audio.play().catch(() => {});
-    } else {
-      audio.pause();
-    }
+    if (audio.paused) audio.play().catch(()=>{});
+    else              audio.pause();
   });
-
   $('stop-btn').addEventListener('click', () => {
-    audio.pause();
-    audio.src = '';
-    state.isPlaying = false;
-    state.currentStation = null;
+    audio.pause(); audio.src = '';
+    state.isPlaying = false; state.currentStation = null;
     updatePlayBtn();
-    npName.textContent = 'Not playing';
-    npMeta.textContent = '';
-    npStreamTitle.textContent = '';
-    npFavicon.textContent = '📻';
+    $('np-name').textContent = 'Select a station to play';
+    $('np-meta').textContent = '';
+    $('np-stream-title').textContent = '';
+    $('np-favicon').textContent = '📻';
+    $('np-fav-btn').textContent = '♡';
+    $('np-fav-btn').classList.remove('active');
     document.title = 'Radio Player';
-    refreshStationHighlight();
+    refreshCards();
   });
 
   // Volume
-  volSlider.addEventListener('input', () => {
-    state.volume = +volSlider.value;
-    audio.volume = state.volume / 100;
-    volLabel.textContent = state.volume + '%';
-    updateVolIcon();
-  });
+  $('vol-slider').addEventListener('input', e => updateVolume(+e.target.value));
 
-  // EQ modal
-  $('eq-btn').addEventListener('click', () => { buildEQModal(); openEQ(); });
-  $('eq-close').addEventListener('click', () => $('eq-modal').classList.remove('open'));
+  // EQ
   $('eq-apply').addEventListener('click', () => {
     $('eq-modal').classList.remove('open');
     showStatus('Equalizer applied');
   });
-  $('eq-reset').addEventListener('click', () => applyEQPreset('Flat'));
+  $('eq-reset').addEventListener('click', () => applyPreset('Flat'));
 
-  // Sleep timer modal
-  $('timer-btn').addEventListener('click', openSleepTimer);
-  $('timer-close').addEventListener('click', closeSleepTimer);
-  $('timer-set').addEventListener('click', startSleepTimer);
-  $('timer-cancel').addEventListener('click', () => { clearSleepTimer(); closeSleepTimer(); });
+  // Sleep timer
+  $('timer-set').addEventListener('click', startTimer);
+  $('timer-cancel').addEventListener('click', () => { clearTimer(); $('timer-modal').classList.remove('open'); });
   document.querySelectorAll('.timer-pill').forEach(btn => {
-    btn.addEventListener('click', () => setSleepTimer(+btn.dataset.min));
-  });
-
-  // Close modals on overlay click
-  document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    overlay.addEventListener('click', e => {
-      if (e.target === overlay) overlay.classList.remove('open');
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.timer-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      $('custom-timer-input').value = btn.dataset.min;
     });
   });
 
-  // Keyboard shortcuts
+  // Close modals on overlay click
+  document.querySelectorAll('.modal-overlay').forEach(o => {
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+  });
+
+  // Keyboard
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT') return;
-    if (e.code === 'Space') { e.preventDefault(); playBtn.click(); }
+    if (e.code === 'Space') { e.preventDefault(); $('play-btn').click(); }
     if (e.code === 'KeyS')  { $('stop-btn').click(); }
+    if (e.code === 'KeyF' && state.currentStation) App.toggleCurrentFav();
   });
 }
 
-function updateVolIcon() {
-  const icon = $('vol-icon');
-  if (!icon) return;
-  if (state.volume === 0) icon.textContent = '🔇';
-  else if (state.volume < 40) icon.textContent = '🔈';
-  else if (state.volume < 70) icon.textContent = '🔉';
-  else icon.textContent = '🔊';
+// ── Init ──────────────────────────────────────────────────────────
+async function init() {
+  updateVolume(state.volume);
+  await loadFavorites();
+  bindEvents();
+  loadHome();
+  loadSidebarData();
 }
 
-// ── Boot ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);

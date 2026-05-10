@@ -3,112 +3,195 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0d0d1a">
+  <meta name="theme-color" content="#121212">
   <title>Radio Player</title>
   <link rel="icon" href="/static/img/radio_icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <div id="app">
 
-  <!-- ── Top Bar ─────────────────────────────────────────────── -->
-  <header id="topbar">
-    <span id="app-title">📻 Radio Player</span>
-    <div id="search-wrap">
-      <span id="search-icon">🔍</span>
-      <input id="search-input" type="search" placeholder="Search stations…" autocomplete="off" spellcheck="false">
-    </div>
-    <span id="loading-indicator"></span>
-    <div style="flex:1"></div>
-    <!-- Status message (right side of topbar) -->
-    <span id="status-msg" style="font-size:11px;color:var(--text-sec);transition:opacity 0.4s;opacity:0;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;"></span>
-  </header>
-
-  <!-- ── Sidebar ──────────────────────────────────────────────── -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!--  SIDEBAR                                                   -->
+  <!-- ══════════════════════════════════════════════════════════ -->
   <nav id="sidebar">
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="browse">Browse</button>
-      <button class="tab-btn" data-tab="favorites">Favorites</button>
+    <div class="sidebar-top">
+      <a class="app-logo" href="#">
+        <span class="app-logo-icon">📻</span>
+        <span class="app-logo-text">Radio Player</span>
+      </a>
+
+      <div class="nav-section">
+        <button class="nav-btn active" id="nav-home" onclick="App.goHome()">
+          <span class="nav-icon">🏠</span> Home
+        </button>
+        <button class="nav-btn" id="nav-search" onclick="App.focusSearch()">
+          <span class="nav-icon">🔍</span> Search
+        </button>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="nav-section">
+        <button class="nav-btn" id="nav-favs" onclick="App.showFavorites()">
+          <span class="nav-icon">💚</span> Your Library
+        </button>
+      </div>
     </div>
 
-    <!-- Browse tab -->
-    <div class="tab-panel active" id="tab-browse">
-      <div class="side-section-label">Countries</div>
-      <div class="side-list" id="country-list">
-        <div class="side-item" style="color:var(--text-mute)">Loading…</div>
-      </div>
-      <div class="side-section-label" style="margin-top:4px">Genres</div>
-      <div class="side-list" id="genre-list" style="max-height:220px">
-        <div class="side-item" style="color:var(--text-mute)">Loading…</div>
-      </div>
-    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section-label">Browse</div>
 
-    <!-- Favorites tab -->
-    <div class="tab-panel" id="tab-favorites">
-      <div class="side-list" id="fav-list"></div>
+    <div class="sidebar-scroll" id="sidebar-scroll">
+      <div class="sidebar-section-label" style="padding-top:0">Countries</div>
+      <div id="country-list">
+        <div class="sidebar-item" style="color:var(--text-3)">Loading…</div>
+      </div>
+      <div class="sidebar-section-label">Genres</div>
+      <div id="genre-list">
+        <div class="sidebar-item" style="color:var(--text-3)">Loading…</div>
+      </div>
     </div>
   </nav>
 
-  <!-- ── Main Station List ─────────────────────────────────────── -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!--  MAIN                                                      -->
+  <!-- ══════════════════════════════════════════════════════════ -->
   <main id="main">
-    <div id="section-header">
-      <span id="section-title">Top Stations</span>
-      <span id="station-count"></span>
+
+    <!-- Top bar -->
+    <div id="topbar">
+      <div class="topbar-nav">
+        <button class="topbar-nav-btn" onclick="history.back()" title="Back">‹</button>
+        <button class="topbar-nav-btn" onclick="history.forward()" title="Forward">›</button>
+      </div>
+      <div id="search-wrap">
+        <span id="search-icon">🔍</span>
+        <input id="search-input" type="search" placeholder="What do you want to listen to?" autocomplete="off" spellcheck="false">
+      </div>
+      <span id="loading-indicator"></span>
+      <div style="flex:1"></div>
+      <span id="status-msg"></span>
     </div>
-    <div id="station-list"></div>
+
+    <!-- Scrollable content -->
+    <div id="content">
+
+      <!-- Home view -->
+      <div id="view-home">
+        <div class="section">
+          <div class="section-header">
+            <h1 class="section-title" id="greeting">Good evening</h1>
+          </div>
+          <!-- Quick picks: 2×3 grid of horizontal cards -->
+          <div class="quick-grid" id="quick-grid"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <span class="section-sub">Top Stations</span>
+            <span class="see-all" onclick="App.showAllTop()">SEE ALL</span>
+          </div>
+          <div class="card-grid" id="featured-grid"></div>
+        </div>
+      </div>
+
+      <!-- All stations view -->
+      <div id="view-all" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-sub" id="section-title">All Stations</span>
+            <span id="station-count" style="font-size:12px;color:var(--text-3)"></span>
+          </div>
+          <div class="card-grid" id="station-grid"></div>
+        </div>
+      </div>
+
+      <!-- Search view -->
+      <div id="view-search" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-sub" id="search-title">Results</span>
+            <span id="search-count" style="font-size:12px;color:var(--text-3)"></span>
+          </div>
+          <div class="card-grid" id="search-grid"></div>
+        </div>
+      </div>
+
+      <!-- Favorites view -->
+      <div id="view-favs" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-sub">Your Library</span>
+            <span id="fav-count" style="font-size:12px;color:var(--text-3)"></span>
+          </div>
+          <div class="card-grid" id="fav-grid"></div>
+        </div>
+      </div>
+
+    </div><!-- #content -->
   </main>
 
-  <!-- ── Now Playing Bar ──────────────────────────────────────── -->
-  <footer id="player-bar">
-    <!-- Now playing info -->
-    <div id="np-favicon">📻</div>
-    <div id="np-info">
-      <div id="np-name">Not playing</div>
-      <div id="np-meta"></div>
-      <div id="np-stream-title"></div>
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!--  NOW PLAYING BAR                                           -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div id="player-bar">
+
+    <!-- Left: now playing -->
+    <div id="np-left">
+      <div id="np-favicon">📻</div>
+      <div id="np-info">
+        <div id="np-name">Select a station to play</div>
+        <div id="np-meta"></div>
+        <div id="np-stream-title"></div>
+      </div>
+      <button id="np-fav-btn" title="Save to library" onclick="App.toggleCurrentFav()">♡</button>
     </div>
 
-    <!-- Playback controls -->
-    <div id="controls">
-      <button class="ctrl-btn" id="stop-btn" title="Stop (S)">⏹</button>
-      <button id="play-btn" title="Play / Pause (Space)">▶</button>
+    <!-- Center: controls -->
+    <div id="np-center">
+      <div id="np-controls">
+        <button class="ctrl-btn" id="stop-btn" title="Stop">⏹</button>
+        <button id="play-btn" title="Play / Pause (Space)">▶</button>
+      </div>
     </div>
 
-    <!-- Volume -->
-    <div id="volume-wrap">
-      <span id="vol-icon" title="Click to mute">🔊</span>
+    <!-- Right: volume + tools -->
+    <div id="np-right">
+      <span id="timer-display"></span>
+      <button class="tool-btn" id="timer-btn" onclick="openTimerModal()" title="Sleep Timer">⏰ Sleep</button>
+      <button class="tool-btn" id="eq-btn"    onclick="openEQModal()"    title="Equalizer">EQ</button>
+      <span id="vol-icon" title="Volume">🔊</span>
       <input id="vol-slider" type="range" min="0" max="100" value="80" title="Volume">
       <span id="vol-label">80%</span>
     </div>
 
-    <!-- Extra tools -->
-    <div id="extra-controls">
-      <span id="timer-display"></span>
-      <button class="tool-btn" id="timer-btn" title="Sleep Timer">⏰ Sleep</button>
-      <button class="tool-btn" id="eq-btn" title="Equalizer">EQ</button>
-    </div>
-  </footer>
-
+  </div>
 </div><!-- #app -->
 
-<!-- ── Equalizer Modal ─────────────────────────────────────────── -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!--  EQUALIZER MODAL                                               -->
+<!-- ══════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="eq-modal">
   <div class="modal">
     <h3>🎚 Equalizer</h3>
-    <div id="eq-content"><!-- built by JS --></div>
+    <div id="eq-content"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" id="eq-reset">Reset</button>
-      <button class="btn btn-ghost" id="eq-close">Close</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('eq-modal').classList.remove('open')">Close</button>
       <button class="btn btn-primary" id="eq-apply">Apply</button>
     </div>
   </div>
 </div>
 
-<!-- ── Sleep Timer Modal ───────────────────────────────────────── -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!--  SLEEP TIMER MODAL                                             -->
+<!-- ══════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="timer-modal">
   <div class="modal">
     <h3>⏰ Sleep Timer</h3>
-    <p style="color:var(--text-sec);font-size:12px;margin-bottom:14px">Stop playback automatically after:</p>
+    <p style="color:var(--text-2);font-size:13px;margin-bottom:4px">Stop playback after:</p>
     <div class="timer-options">
       <button class="timer-pill" data-min="15">15 min</button>
       <button class="timer-pill" data-min="30">30 min</button>
@@ -118,14 +201,14 @@
       <button class="timer-pill" data-min="120">2 hours</button>
     </div>
     <div class="timer-custom">
-      <label style="color:var(--text-sec);font-size:12px">Custom:</label>
-      <input id="custom-timer-input" type="number" min="1" max="999" placeholder="min" value="30">
-      <span style="color:var(--text-sec);font-size:12px">minutes</span>
+      <span>Custom:</span>
+      <input id="custom-timer-input" type="number" min="1" max="999" value="30">
+      <span>minutes</span>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" id="timer-cancel">Cancel / Disable</button>
+      <button class="btn btn-ghost" id="timer-cancel">Disable Timer</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('timer-modal').classList.remove('open')">Close</button>
       <button class="btn btn-primary" id="timer-set">Set Timer</button>
-      <button class="btn btn-secondary" id="timer-close">Close</button>
     </div>
   </div>
 </div>
