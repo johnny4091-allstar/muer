@@ -1,0 +1,40 @@
+{
+  "name": "Radio Player",
+  "short_name": "Radio",
+  "description": "Stream 30,000+ online radio stations and podcasts",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d1117",
+  "theme_color": "#58a6ff",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Top Stations",
+      "short_name": "Top",
+      "description": "Browse top radio stations",
+      "url": "/?view=home"
+    },
+    {
+      "name": "Podcasts",
+      "short_name": "Podcasts",
+      "description": "Browse podcasts",
+      "url": "/?view=podcasts"
+    }
+  ]
+}
