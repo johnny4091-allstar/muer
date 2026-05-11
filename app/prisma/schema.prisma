@@ -1,0 +1,348 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── AUTH & RESELLERS ──────────────────────────────────────────────────────
+
+model Reseller {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  tier         Tier     @default(BASIC)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  xtreamConfig     XtreamConfig?
+  devices          Device[]
+  broadcasts       Broadcast[]
+  dnsEntries       DnsEntry[]
+  appBuilds        AppBuild[]
+  webDeployments   WebPlayerDeployment[]
+  fleetSettings    FleetSettings?
+  versionConfig    VersionConfig?
+}
+
+enum Tier {
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+// ─── XTREAM CONFIG ─────────────────────────────────────────────────────────
+
+model XtreamConfig {
+  id         String   @id @default(cuid())
+  resellerId String   @unique
+  panelUrl   String
+  username   String
+  password   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  reseller Reseller @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+}
+
+// ─── DEVICES ───────────────────────────────────────────────────────────────
+
+model Device {
+  id           String    @id @default(cuid())
+  deviceId     String    @unique
+  resellerId   String
+  model        String?
+  appVersion   String?
+  ipAddress    String?
+  isOnline     Boolean   @default(false)
+  lastSeenAt   DateTime?
+  registeredAt DateTime  @default(now())
+
+  reseller     Reseller        @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+  commands     DeviceCommand[]
+  errorLogs    ErrorLog[]
+  favorites    Favorite[]
+  dvrSchedules DvrSchedule[]
+  quota        DvrQuota?
+}
+
+// ─── DEVICE COMMANDS ───────────────────────────────────────────────────────
+
+model DeviceCommand {
+  id          String        @id @default(cuid())
+  deviceId    String
+  type        CommandType
+  payload     Json?
+  status      CommandStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  deliveredAt DateTime?
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, status])
+}
+
+enum CommandType {
+  MESSAGE
+  CLEAR_CACHE
+  RESTART
+  FORCE_UPDATE
+  TERMINATE
+  WIPE
+  PUSH_SETTINGS
+}
+
+enum CommandStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+// ─── ERROR LOGS ────────────────────────────────────────────────────────────
+
+model ErrorLog {
+  id             String    @id @default(cuid())
+  deviceId       String
+  errorType      ErrorType
+  streamUrl      String?
+  recoveryStatus String?
+  raw            Json?
+  occurredAt     DateTime  @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId])
+  @@index([errorType])
+}
+
+enum ErrorType {
+  STUCK_PLAYER
+  PLAYBACK_FAILED
+  NUCLEAR_RECOVERY
+  UNKNOWN
+}
+
+// ─── BROADCASTS ────────────────────────────────────────────────────────────
+
+model Broadcast {
+  id         String          @id @default(cuid())
+  resellerId String
+  title      String
+  body       String
+  targetAll  Boolean         @default(true)
+  targetIds  String[]
+  status     BroadcastStatus @default(QUEUED)
+  sentAt     DateTime        @default(now())
+
+  reseller   Reseller            @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+  deliveries BroadcastDelivery[]
+}
+
+enum BroadcastStatus {
+  QUEUED
+  SENDING
+  DONE
+}
+
+model BroadcastDelivery {
+  id          String    @id @default(cuid())
+  broadcastId String
+  deviceId    String
+  deliveredAt DateTime?
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@index([broadcastId])
+  @@index([deviceId])
+}
+
+// ─── FLEET SETTINGS ────────────────────────────────────────────────────────
+
+model FleetSettings {
+  id                 String   @id @default(cuid())
+  resellerId         String   @unique
+  bufferSize         Int      @default(3000)
+  epgRefreshInterval Int      @default(3600)
+  playbackOptions    Json?
+  version            Int      @default(1)
+  updatedAt          DateTime @updatedAt
+
+  reseller Reseller @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+}
+
+// ─── EPG CACHE ─────────────────────────────────────────────────────────────
+
+model EpgEntry {
+  id          String   @id @default(cuid())
+  channelId   String
+  resellerId  String
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  category    String?
+  poster      String?
+  cachedAt    DateTime @default(now())
+
+  @@unique([channelId, resellerId, startTime])
+  @@index([channelId, resellerId, startTime])
+  @@index([resellerId, startTime])
+}
+
+// ─── DVR ───────────────────────────────────────────────────────────────────
+
+model DvrSchedule {
+  id          String         @id @default(cuid())
+  deviceId    String
+  channelId   String
+  streamUrl   String
+  title       String
+  episodeInfo String?
+  airDate     DateTime?
+  startTime   DateTime
+  endTime     DateTime
+  status      ScheduleStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+
+  device    Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  recording DvrRecording?
+
+  @@index([deviceId])
+  @@index([status, startTime])
+}
+
+enum ScheduleStatus {
+  PENDING
+  RECORDING
+  DONE
+  FAILED
+  CANCELLED
+}
+
+model DvrRecording {
+  id          String    @id @default(cuid())
+  scheduleId  String    @unique
+  filePath    String
+  sizeBytes   BigInt    @default(0)
+  durationSec Int       @default(0)
+  title       String
+  channelId   String
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  schedule DvrSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+}
+
+model DvrQuota {
+  id         String   @id @default(cuid())
+  deviceId   String   @unique
+  quotaBytes BigInt   @default(10737418240)
+  usedBytes  BigInt   @default(0)
+  updatedAt  DateTime @updatedAt
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+// ─── FAVORITES ─────────────────────────────────────────────────────────────
+
+model Favorite {
+  id        String       @id @default(cuid())
+  deviceId  String
+  itemType  FavoriteType
+  itemId    String
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, itemType, itemId])
+  @@index([deviceId])
+}
+
+enum FavoriteType {
+  CHANNEL
+  MOVIE
+  SERIES
+}
+
+// ─── DNS ENTRIES ───────────────────────────────────────────────────────────
+
+model DnsEntry {
+  id         String   @id @default(cuid())
+  resellerId String
+  subdomain  String   @unique
+  targetIp   String
+  createdAt  DateTime @default(now())
+
+  reseller Reseller @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+}
+
+// ─── VERSION CONTROL ───────────────────────────────────────────────────────
+
+model VersionConfig {
+  id            String   @id @default(cuid())
+  resellerId    String   @unique
+  masterVersion String   @default("1.0.0")
+  autoUpdate    Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+
+  reseller Reseller      @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+  pins     VersionPin[]
+}
+
+model VersionPin {
+  id              String   @id @default(cuid())
+  versionConfigId String
+  deviceId        String
+  pinnedVersion   String
+  createdAt       DateTime @default(now())
+
+  versionConfig VersionConfig @relation(fields: [versionConfigId], references: [id], onDelete: Cascade)
+
+  @@unique([versionConfigId, deviceId])
+}
+
+// ─── APK BUILDS ────────────────────────────────────────────────────────────
+
+model AppBuild {
+  id           String      @id @default(cuid())
+  resellerId   String
+  appName      String
+  primaryColor String
+  accentColor  String
+  logoPath     String?
+  splashPath   String?
+  branch       String      @default("main")
+  status       BuildStatus @default(QUEUED)
+  downloadUrl  String?
+  buildLog     String?
+  createdAt    DateTime    @default(now())
+  completedAt  DateTime?
+
+  reseller Reseller @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+}
+
+enum BuildStatus {
+  QUEUED
+  BUILDING
+  SUCCESS
+  FAILED
+}
+
+// ─── WEB PLAYER DEPLOYMENTS ────────────────────────────────────────────────
+
+model WebPlayerDeployment {
+  id            String    @id @default(cuid())
+  resellerId    String
+  vpsIp         String
+  instanceId    String    @unique
+  label         String?
+  isOnline      Boolean   @default(false)
+  lastHeartbeat DateTime?
+  createdAt     DateTime  @default(now())
+
+  reseller Reseller @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+}
