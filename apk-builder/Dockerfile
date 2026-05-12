@@ -29,10 +29,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
 WORKDIR /worker
 COPY package.json ./
 RUN npm install
+COPY prisma ./prisma
+RUN node_modules/.bin/prisma generate
 COPY . .
-RUN npx prisma generate --schema=schema.prisma && npx tsc
-
-# android-template is mounted as a volume at /android-template
-# See docker-compose.yml volumes section
+RUN node_modules/.bin/tsc
 
 CMD ["node", "dist/builder.js"]

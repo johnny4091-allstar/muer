@@ -1,0 +1,38 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BuildStatus {
+  QUEUED
+  BUILDING
+  SUCCESS
+  FAILED
+}
+
+model Reseller {
+  id        String     @id @default(cuid())
+  appBuilds AppBuild[]
+}
+
+model AppBuild {
+  id           String      @id @default(cuid())
+  resellerId   String
+  reseller     Reseller    @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+  appName      String
+  primaryColor String
+  accentColor  String
+  logoPath     String?
+  splashPath   String?
+  branch       String      @default("main")
+  status       BuildStatus @default(QUEUED)
+  downloadUrl  String?
+  buildLog     String?
+  createdAt    DateTime    @default(now())
+  completedAt  DateTime?
+}
