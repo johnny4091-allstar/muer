@@ -1,12 +1,25 @@
-node_modules
-/.cache
-/netlify/functions/server/index.js
-/public/build
-/.netlify
+# Dependencies
+node_modules/
+*/node_modules/
 
-/.env
+# Next.js
+app/.next/
+app/out/
+app/.vercel
 
-/app/styles/tailwind.css
+# Build output
+ffmpeg-worker/dist/
 
-cypress/videos/
+# Environment files
 .env
+.env.local
+
+# SSL certs (generated at install time)
+nginx/ssl/*.pem
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
