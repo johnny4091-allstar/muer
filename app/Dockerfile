@@ -32,7 +32,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # Prisma v5 CLI for migrations + seeding (avoids npx downloading v7)
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+COPY --from=builder /app/node_modules/.bin/prisma /app/node_modules/.bin/prisma_schema_build_bg.wasm ./node_modules/.bin/
 # Runtime dep for compiled seed.js
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
