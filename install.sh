@@ -162,9 +162,9 @@ echo ""
 
 # 11. Run migrations and seed
 echo "▶ Running database migrations..."
-docker compose exec -T app npx prisma migrate deploy
+docker compose exec -T -u root app ./node_modules/.bin/prisma migrate deploy
 echo "▶ Seeding database (creating admin account)..."
-docker compose exec -T app npx prisma db seed
+docker compose exec -T -u root app ./node_modules/.bin/prisma db seed
 
 # 12. Cron for device status + EPG refresh
 echo "▶ Setting up cron job..."
