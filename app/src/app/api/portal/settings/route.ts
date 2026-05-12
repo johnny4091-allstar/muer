@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -47,10 +48,12 @@ export async function PUT(req: NextRequest) {
     const data = fullSchema.parse(body);
 
     if (data.settings) {
+      const { playbackOptions, ...restSettings } = data.settings;
+      const jsonOpts = playbackOptions as Prisma.InputJsonValue | undefined;
       await prisma.fleetSettings.upsert({
         where: { resellerId: session.user.id },
-        update: { ...data.settings, version: { increment: 1 } },
-        create: { resellerId: session.user.id, ...data.settings },
+        update: { ...restSettings, playbackOptions: jsonOpts, version: { increment: 1 } },
+        create: { resellerId: session.user.id, ...restSettings, playbackOptions: jsonOpts },
       });
     }
 

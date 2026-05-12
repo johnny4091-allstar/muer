@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import type { CommandType } from "./types";
 
@@ -20,7 +21,7 @@ export async function enqueueBulkCommands(
     data: deviceIds.map((deviceId) => ({
       deviceId,
       type,
-      payload: payload ?? undefined,
+      payload: payload as Prisma.InputJsonValue | undefined,
     })),
   });
 }
