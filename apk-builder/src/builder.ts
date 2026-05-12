@@ -142,6 +142,7 @@ async function processBuild(buildId: string): Promise<void> {
       "{{PRIMARY_COLOR}}": primaryColor,
       "{{ACCENT_COLOR}}": accentColor,
       "{{PORTAL_URL}}": PORTAL_URL,
+      "com.iptvsaas.player": packageName,
     };
 
     // Replace placeholders in all files
