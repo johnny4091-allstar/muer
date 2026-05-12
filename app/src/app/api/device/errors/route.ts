@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { validateDeviceToken, extractBearerToken } from "@/lib/device-auth";
 import { z } from "zod";
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
         errorType: e.type,
         streamUrl: e.streamUrl,
         recoveryStatus: e.recoveryStatus,
-        raw: e.raw,
+        raw: e.raw as Prisma.InputJsonValue | undefined,
       })),
     });
 

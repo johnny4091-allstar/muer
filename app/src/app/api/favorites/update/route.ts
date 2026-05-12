@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { validateDeviceToken, extractBearerToken } from "@/lib/device-auth";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -31,8 +32,8 @@ export async function POST(req: NextRequest) {
     if (data.action === "add") {
       await prisma.favorite.upsert({
         where: { deviceId_itemType_itemId: { deviceId: resolvedDeviceId, itemType: data.itemType, itemId: data.itemId } },
-        update: { metadata: data.metadata },
-        create: { deviceId: resolvedDeviceId, itemType: data.itemType, itemId: data.itemId, metadata: data.metadata },
+        update: { metadata: data.metadata as Prisma.InputJsonValue },
+        create: { deviceId: resolvedDeviceId, itemType: data.itemType, itemId: data.itemId, metadata: data.metadata as Prisma.InputJsonValue },
       });
     } else {
       await prisma.favorite.deleteMany({
@@ -53,8 +54,8 @@ export async function POST(req: NextRequest) {
     if (data.action === "add") {
       await prisma.favorite.upsert({
         where: { deviceId_itemType_itemId: { deviceId: device.id, itemType: data.itemType, itemId: data.itemId } },
-        update: { metadata: data.metadata },
-        create: { deviceId: device.id, itemType: data.itemType, itemId: data.itemId, metadata: data.metadata },
+        update: { metadata: data.metadata as Prisma.InputJsonValue },
+        create: { deviceId: device.id, itemType: data.itemType, itemId: data.itemId, metadata: data.metadata as Prisma.InputJsonValue },
       });
     } else {
       await prisma.favorite.deleteMany({
