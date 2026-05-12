@@ -89,7 +89,7 @@ async function processJob(payload: DvrJobPayload): Promise<void> {
           // Update quota
           const device = await prisma.dvrSchedule
             .findUnique({ where: { id: scheduleId } })
-            .then((s) => (s ? prisma.device.findUnique({ where: { id: s.deviceId } }) : null));
+            .then((s: { deviceId: string } | null) => (s ? prisma.device.findUnique({ where: { id: s.deviceId } }) : null));
           if (device) {
             await prisma.dvrQuota.upsert({
               where: { deviceId: device.id },
