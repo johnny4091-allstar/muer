@@ -8,7 +8,7 @@ export async function enqueueCommand(
   payload?: Record<string, unknown>
 ) {
   return prisma.deviceCommand.create({
-    data: { deviceId, type, payload: payload ?? undefined },
+    data: { deviceId, type, payload: payload as Prisma.InputJsonValue | undefined },
   });
 }
 
