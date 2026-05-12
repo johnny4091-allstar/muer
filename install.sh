@@ -50,9 +50,35 @@ else
   echo "✓ Docker already installed"
 fi
 
-# 3. Install Certbot (for SSL)
+# 3. Install Certbot (for SSL) + DNS pre-check
 if [[ -n "$DOMAIN" ]]; then
-  apt-get install -y -q certbot
+  apt-get install -y -q certbot dnsutils
+  echo "▶ Checking DNS for $DOMAIN..."
+  SERVER_IP=$(curl -4 -sf --max-time 5 https://ifconfig.me || curl -4 -sf --max-time 5 https://api.ipify.org || true)
+  DOMAIN_IP=$(dig +short "$DOMAIN" A 2>/dev/null | tail -1 || true)
+  if [[ -z "$DOMAIN_IP" ]]; then
+    echo ""
+    echo "ERROR: DNS lookup for '$DOMAIN' returned no A record."
+    echo "  • Make sure you've created an A record pointing '$DOMAIN' → this server's IP"
+    echo "  • Then wait 5-15 minutes for DNS to propagate and re-run this script"
+    echo ""
+    echo "  To install without SSL (self-signed, for testing):"
+    echo "    sudo bash install.sh"
+    echo ""
+    exit 1
+  fi
+  if [[ -n "$SERVER_IP" && "$DOMAIN_IP" != "$SERVER_IP" ]]; then
+    echo ""
+    echo "ERROR: '$DOMAIN' resolves to $DOMAIN_IP but this server's IP is $SERVER_IP."
+    echo "  • Update your DNS A record to point '$DOMAIN' → $SERVER_IP"
+    echo "  • Wait 5-15 minutes for propagation, then re-run."
+    echo ""
+    echo "  To install without SSL (self-signed, for testing):"
+    echo "    sudo bash install.sh"
+    echo ""
+    exit 1
+  fi
+  echo "✓ DNS check passed ($DOMAIN → $DOMAIN_IP)"
 fi
 
 # 4. Firewall
