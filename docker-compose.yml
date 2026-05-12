@@ -77,6 +77,26 @@ services:
     networks:
       - internal
 
+  apk-builder:
+    build:
+      context: ./apk-builder
+      dockerfile: Dockerfile
+    container_name: iptvsaas_apk_builder
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://iptvsaas:${POSTGRES_PASSWORD}@postgres:5432/iptvsaas
+      PORTAL_URL: ${NEXTAUTH_URL}
+      STORAGE_PATH: /storage
+      ANDROID_HOME: /opt/android-sdk
+    volumes:
+      - storage_uploads:/storage/uploads
+      - ./android-template:/android-template:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
   nginx:
     image: nginx:1.25-alpine
     container_name: iptvsaas_nginx

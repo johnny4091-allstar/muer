@@ -1,0 +1,17 @@
+{
+  "name": "apk-builder",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/builder.js"
+  },
+  "dependencies": {
+    "@prisma/client": "5.14.0",
+    "ioredis": "^5.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "prisma": "5.14.0",
+    "typescript": "^5.4.5"
+  }
+}
