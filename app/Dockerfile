@@ -1,5 +1,6 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
+RUN apk add --no-cache openssl
 
 COPY package.json ./
 RUN npm install
@@ -20,6 +21,7 @@ console.log('seed.ts compiled to seed.js');"
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apk add --no-cache openssl
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
