@@ -1,8 +1,10 @@
-import { Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { DialogHost } from '../components/DialogHost';
 import { useStore } from '../store/store';
 import { colors } from '../theme';
 
@@ -28,6 +30,17 @@ export default function RootLayout() {
           headerTitleStyle: { color: colors.text, fontWeight: '700' },
           headerBackButtonDisplayMode: 'minimal',
           contentStyle: { backgroundColor: colors.bg },
+          // On web, draw the back arrow from the icon font so it doesn't depend on image assets.
+          ...(Platform.OS === 'web'
+            ? {
+                headerLeft: ({ canGoBack }: { canGoBack?: boolean }) =>
+                  canGoBack ? (
+                    <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Back" style={{ paddingRight: 8 }}>
+                      <Ionicons name="chevron-back" size={26} color={colors.brand} />
+                    </Pressable>
+                  ) : null,
+              }
+            : null),
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -46,6 +59,7 @@ export default function RootLayout() {
         <Stack.Screen name="reports" options={{ title: 'Reports' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
       </Stack>
+      <DialogHost />
     </SafeAreaProvider>
   );
 }

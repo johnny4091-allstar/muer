@@ -9,13 +9,13 @@ import { currency, lineTotal, parseAmount, totals } from '../lib/money';
 import { useStore } from '../store/store';
 import type { ID, Job, LineItem, Pricing } from '../store/types';
 import { colors, jobTone, radius, space, type } from '../theme';
+import { showDialog } from './DialogHost';
 import { Avatar, Badge, Card, KeyValue, styles as ui, type IconName } from './ui';
 
-/** Cross-platform confirm: native Alert on devices, window.confirm on web. */
+/** Cross-platform confirm: native Alert on devices, an in-app dialog on web. */
 export function confirm(title: string, message: string, onConfirm: () => void, confirmLabel = 'Confirm') {
   if (Platform.OS === 'web') {
-    // eslint-disable-next-line no-alert
-    if (globalThis.confirm?.(`${title}\n\n${message}`)) onConfirm();
+    showDialog({ title, message, confirmLabel, onConfirm });
     return;
   }
   Alert.alert(title, message, [
@@ -26,8 +26,7 @@ export function confirm(title: string, message: string, onConfirm: () => void, c
 
 export function notify(title: string, message?: string) {
   if (Platform.OS === 'web') {
-    // eslint-disable-next-line no-alert
-    globalThis.alert?.(message ? `${title}\n\n${message}` : title);
+    showDialog({ title, message });
     return;
   }
   Alert.alert(title, message);

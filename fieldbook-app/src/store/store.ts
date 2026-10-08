@@ -375,6 +375,9 @@ export const useStore = create<AppState>()(
   ),
 );
 
+// Without usable storage (e.g. blocked site data) persist never hydrates; run in-memory instead.
+if (!useStore.persist) useStore.setState({ hydrated: true });
+
 // ---------- Selectors & derived helpers ----------
 
 export const useMe = () => {
